@@ -17,6 +17,11 @@ the Mini App. Chat uses the verified Telegram username, or first name when no
 username is available. The chat still has no saved history or game; messages
 sent while disconnected are not replayed.
 
+If the Mini App says its Telegram login could not be verified, close it fully and
+launch it again from Telegram. A repeated `401` also means the Hideout service's
+`TELEGRAM_BOT_TOKEN` may not belong to the bot whose Mini App was opened. Group
+membership checks happen only after Telegram login succeeds.
+
 The server listens on `0.0.0.0` and uses `PORT` (default `8080`). No cloud deployment
 is required for local testing.
 

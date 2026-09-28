@@ -55,7 +55,7 @@
       }
       if (!response.ok) {
         status.textContent = response.status === 403 ? 'This Telegram account is not in the allowed group.' :
-          response.status === 401 ? 'Telegram login expired. Close and reopen Hideout.' :
+          response.status === 401 ? 'Telegram login could not be verified. Close and reopen Hideout.' :
           'Could not check group membership. Try opening Hideout again.';
         return;
       }
