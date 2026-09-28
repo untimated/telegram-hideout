@@ -33,7 +33,10 @@ export function verifyInitData(raw, botToken, nowSeconds = Math.floor(Date.now()
     const user = JSON.parse(params.get('user'));
     if (!Number.isSafeInteger(user.id) || user.id <= 0 || typeof user.first_name !== 'string' || !user.first_name.trim()) return null;
     const name = typeof user.username === 'string' && user.username ? `@${user.username}` : user.first_name.trim();
-    return { id: user.id, name: name.slice(0, 100) };
+    const photoURL = typeof user.photo_url === 'string' && user.photo_url.length <= 2048 && user.photo_url.startsWith('https://')
+      ? user.photo_url
+      : undefined;
+    return { id: user.id, name: name.slice(0, 100), ...(photoURL ? { photoURL } : {}) };
   } catch {
     return null;
   }
@@ -46,6 +49,7 @@ function sessionKey(botToken) {
 export function makeSession(user, botToken, nowSeconds = Math.floor(Date.now() / 1000)) {
   const session = { id: user.id, name: user.name, exp: nowSeconds + sessionMaxAgeSeconds };
   if (user.guest === true) session.guest = true;
+  if (typeof user.photoURL === 'string') session.photoURL = user.photoURL;
   const payload = Buffer.from(JSON.stringify(session)).toString('base64url');
   return `${payload}.${mac(sessionKey(botToken), payload).toString('hex')}`;
 }
@@ -59,6 +63,7 @@ export function readSession(cookieHeader, botToken, nowSeconds = Math.floor(Date
   try {
     const session = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
     if (!Number.isSafeInteger(session.id) || session.id <= 0 || typeof session.name !== 'string' || !Number.isSafeInteger(session.exp) || session.exp <= nowSeconds) return null;
+    if (session.photoURL !== undefined && (typeof session.photoURL !== 'string' || session.photoURL.length > 2048 || !session.photoURL.startsWith('https://'))) return null;
     return session;
   } catch {
     return null;

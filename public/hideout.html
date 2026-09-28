@@ -184,7 +184,7 @@
       font-weight: 900;
       cursor: pointer;
       user-select: none;
-      touch-action: manipulation;
+      touch-action: none;
     }
     .move:active { transform: translateY(2px) scale(.96); background: rgba(255, 123, 111, .72); }
     .move:disabled { opacity: .36; cursor: default; }
@@ -290,6 +290,11 @@
     };
     let socket;
     let bubbleTimer;
+    let world;
+    let selfID;
+    const playerState = new Map();
+    const heldDirections = [];
+    let movementTimer;
 
     function setStatus(text, state = '') {
       status.textContent = text;
@@ -314,6 +319,18 @@
     function setConnected(connected) {
       input.disabled = send.disabled = !connected;
       for (const button of moveButtons) button.disabled = !connected;
+      if (!connected) stopAllMovement();
+    }
+
+    function upsertPlayer(player) {
+      if (!player || typeof player.id !== 'string') return;
+      playerState.set(player.id, player);
+      world?.upsertPlayer(player);
+    }
+
+    function removePlayer(id) {
+      playerState.delete(id);
+      world?.removePlayer(id);
     }
 
     async function startThree() {
@@ -321,23 +338,236 @@
         const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js');
         const host = document.getElementById('scene');
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x273556);
-        const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 100);
-        camera.position.set(0, 1.6, 4);
+        scene.background = new THREE.Color(0x171d33);
+        scene.fog = new THREE.Fog(0x171d33, 11, 24);
+        const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 50);
         const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
         renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.shadowMap.enabled = true;
         host.prepend(renderer.domElement);
+
+        scene.add(new THREE.HemisphereLight(0xbfd7ff, 0x46334f, 2.2));
+        const sun = new THREE.DirectionalLight(0xffd7ac, 2.8);
+        sun.position.set(-4, 8, 5);
+        sun.castShadow = true;
+        scene.add(sun);
+
+        const floor = new THREE.Mesh(
+          new THREE.PlaneGeometry(9, 7),
+          new THREE.MeshStandardMaterial({ color: 0x716b83, roughness: .88, metalness: .04 }),
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const grid = new THREE.GridHelper(9, 18, 0xb29dbf, 0x82768f);
+        grid.scale.z = 7 / 9;
+        grid.position.y = .012;
+        grid.material.opacity = .32;
+        grid.material.transparent = true;
+        scene.add(grid);
+
+        function addWall(x, z, width, depth, height = .65) {
+          const wall = new THREE.Mesh(
+            new THREE.BoxGeometry(width, height, depth),
+            new THREE.MeshStandardMaterial({ color: 0x4a4967, roughness: .72 }),
+          );
+          wall.position.set(x, height / 2, z);
+          wall.castShadow = wall.receiveShadow = true;
+          scene.add(wall);
+        }
+        addWall(0, -3.55, 9.4, .28);
+        addWall(-4.55, 0, .28, 7.4);
+        addWall(4.55, 0, .28, 7.4);
+        addWall(0, 3.55, 9.4, .28, .26);
+
+        for (const x of [-3.7, 3.7]) {
+          for (const z of [-2.75, 2.75]) {
+            const lamp = new THREE.PointLight(0xffa66e, 8, 5, 2);
+            lamp.position.set(x, 1.2, z);
+            scene.add(lamp);
+          }
+        }
+
+        const objects = new Map();
+        const focus = new THREE.Vector3();
+        const focusTarget = new THREE.Vector3();
+        const cameraOffset = new THREE.Vector3(6.8, 7.6, 8.8);
+        const desiredCamera = new THREE.Vector3();
+
+        function colorFor(name) {
+          let hash = 0;
+          for (const character of name) hash = (hash * 31 + character.charCodeAt(0)) | 0;
+          return `hsl(${Math.abs(hash) % 360} 58% 48%)`;
+        }
+
+        function avatarTexture(player) {
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 256;
+          const context = canvas.getContext('2d');
+          const drawFrame = () => {
+            context.lineWidth = 14;
+            context.strokeStyle = '#fff8ee';
+            context.beginPath();
+            context.arc(128, 128, 112, 0, Math.PI * 2);
+            context.stroke();
+          };
+          context.fillStyle = colorFor(player.name);
+          context.beginPath();
+          context.arc(128, 128, 112, 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = '#fff8ee';
+          context.font = '800 78px system-ui';
+          context.textAlign = 'center';
+          context.textBaseline = 'middle';
+          context.fillText(player.name.replace(/^@/, '').slice(0, 2).toUpperCase(), 128, 132);
+          drawFrame();
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          if (player.photoURL) {
+            const image = new Image();
+            image.crossOrigin = 'anonymous';
+            image.referrerPolicy = 'no-referrer';
+            image.onload = () => {
+              context.save();
+              context.clearRect(0, 0, 256, 256);
+              context.beginPath();
+              context.arc(128, 128, 105, 0, Math.PI * 2);
+              context.clip();
+              const size = Math.min(image.naturalWidth, image.naturalHeight);
+              const sx = (image.naturalWidth - size) / 2;
+              const sy = (image.naturalHeight - size) / 2;
+              context.drawImage(image, sx, sy, size, size, 16, 16, 224, 224);
+              context.restore();
+              drawFrame();
+              texture.needsUpdate = true;
+            };
+            image.src = player.photoURL;
+          }
+          return texture;
+        }
+
+        function labelTexture(name) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 512;
+          canvas.height = 96;
+          const context = canvas.getContext('2d');
+          context.fillStyle = 'rgba(20, 15, 34, .82)';
+          context.beginPath();
+          context.roundRect(8, 8, 496, 80, 30);
+          context.fill();
+          context.strokeStyle = 'rgba(255, 248, 238, .72)';
+          context.lineWidth = 5;
+          context.stroke();
+          context.fillStyle = '#fff8ee';
+          context.font = '700 34px system-ui';
+          context.textAlign = 'center';
+          context.textBaseline = 'middle';
+          context.fillText(name, 256, 49, 450);
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          return texture;
+        }
+
+        function createPlayer(player) {
+          const group = new THREE.Group();
+          group.position.set(player.x, 0, player.z);
+          group.userData.target = new THREE.Vector3(player.x, 0, player.z);
+
+          const shadow = new THREE.Mesh(
+            new THREE.CircleGeometry(.48, 32),
+            new THREE.MeshBasicMaterial({ color: 0x080912, transparent: true, opacity: .34, depthWrite: false }),
+          );
+          shadow.rotation.x = -Math.PI / 2;
+          shadow.position.y = .02;
+          group.add(shadow);
+
+          const ring = new THREE.Mesh(
+            new THREE.RingGeometry(.52, .61, 32),
+            new THREE.MeshBasicMaterial({ color: 0x91a0c8, side: THREE.DoubleSide }),
+          );
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.y = .035;
+          ring.userData.localMarker = true;
+          group.add(ring);
+
+          const avatar = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: avatarTexture(player),
+            transparent: true,
+            alphaTest: .02,
+          }));
+          avatar.position.y = 1.03;
+          avatar.scale.set(1.35, 1.35, 1);
+          group.add(avatar);
+
+          const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(player.name), transparent: true }));
+          label.position.y = .25;
+          label.scale.set(1.85, .35, 1);
+          group.add(label);
+          scene.add(group);
+          return group;
+        }
+
+        function setLocalPlayer(id) {
+          for (const [playerID, group] of objects) {
+            const ring = group.children.find(child => child.userData.localMarker);
+            if (ring) ring.material.color.set(playerID === id ? 0xffca71 : 0x91a0c8);
+          }
+        }
+
+        function upsertPlayer(player) {
+          let group = objects.get(player.id);
+          if (!group) {
+            group = createPlayer(player);
+            objects.set(player.id, group);
+          }
+          group.userData.target.set(player.x, 0, player.z);
+          setLocalPlayer(selfID);
+        }
+
+        function removePlayer(id) {
+          const group = objects.get(id);
+          if (!group) return;
+          scene.remove(group);
+          group.traverse(object => {
+            object.geometry?.dispose();
+            object.material?.map?.dispose();
+            object.material?.dispose();
+          });
+          objects.delete(id);
+        }
+
         const resize = () => {
           const width = host.clientWidth;
           const height = host.clientHeight;
           renderer.setSize(width, height, false);
           camera.aspect = width / height;
+          camera.fov = camera.aspect < .8 ? 60 : 48;
+          const distance = camera.aspect < .8 ? 1.32 : 1;
+          cameraOffset.set(6.8 * distance, 7.6 * distance, 8.8 * distance);
           camera.updateProjectionMatrix();
-          renderer.render(scene, camera);
         };
         new ResizeObserver(resize).observe(host);
         resize();
-        addDebug('three.js: renderer ready', 'muted');
+        world = { upsertPlayer, removePlayer, setLocalPlayer };
+        for (const player of playerState.values()) upsertPlayer(player);
+        setLocalPlayer(selfID);
+
+        const clock = new THREE.Clock();
+        renderer.setAnimationLoop(() => {
+          const blend = 1 - Math.exp(-10 * Math.min(clock.getDelta(), .1));
+          for (const group of objects.values()) group.position.lerp(group.userData.target, blend);
+          const local = objects.get(selfID);
+          const target = local?.position ?? new THREE.Vector3();
+          focusTarget.set(target.x, .45, target.z);
+          focus.lerp(focusTarget, blend * .7);
+          desiredCamera.copy(focus).add(cameraOffset);
+          camera.position.lerp(desiredCamera, blend * .7);
+          camera.lookAt(focus);
+          renderer.render(scene, camera);
+        });
+        addDebug('three.js: stage ready', 'muted');
       } catch {
         addDebug('three.js: renderer unavailable', 'muted');
       }
@@ -347,6 +577,39 @@
       if (socket?.readyState !== WebSocket.OPEN) return;
       addDebug(`input: ${moveLabel[direction]}`);
       socket.send(JSON.stringify({ type: 'move', direction }));
+    }
+
+    function activeDirection() {
+      return heldDirections.at(-1);
+    }
+
+    function beginMovement(direction) {
+      if (socket?.readyState !== WebSocket.OPEN) return;
+      const existing = heldDirections.indexOf(direction);
+      if (existing >= 0) heldDirections.splice(existing, 1);
+      heldDirections.push(direction);
+      sendMove(direction);
+      if (!movementTimer) movementTimer = setInterval(() => {
+        const active = activeDirection();
+        if (active) sendMove(active);
+      }, 120);
+    }
+
+    function endMovement(direction) {
+      const index = heldDirections.indexOf(direction);
+      if (index >= 0) heldDirections.splice(index, 1);
+      if (!heldDirections.length) {
+        clearInterval(movementTimer);
+        movementTimer = undefined;
+      } else if (index >= 0) {
+        sendMove(activeDirection());
+      }
+    }
+
+    function stopAllMovement() {
+      heldDirections.length = 0;
+      clearInterval(movementTimer);
+      movementTimer = undefined;
     }
 
     async function connect() {
@@ -389,12 +652,32 @@
         let message;
         try { message = JSON.parse(event.data); } catch { return; }
         if (message.type === 'welcome') {
-          const { x = 0, z = 0 } = message.position || {};
-          setStatus(`Connected as ${message.name}`, 'connected');
+          selfID = message.selfID;
+          const currentPlayers = new Set(message.players.map(player => player.id));
+          for (const id of playerState.keys()) if (!currentPlayers.has(id)) removePlayer(id);
+          for (const player of message.players) upsertPlayer(player);
+          world?.setLocalPlayer(selfID);
+          const self = playerState.get(selfID);
+          setStatus(`Connected as ${self?.name ?? 'player'}`, 'connected');
           setConnected(true);
           if (guestMode) addDebug('auth: debug guest access', 'muted');
-          addDebug(`server: joined at (${x.toFixed(1)}, ${z.toFixed(1)})`, 'server');
+          addDebug(`server: joined at (${self.x.toFixed(1)}, ${self.z.toFixed(1)})`, 'server');
+        } else if (message.type === 'player_joined') {
+          upsertPlayer(message.player);
+          addDebug(`server: ${message.player.name} joined`, 'server');
+        } else if (message.type === 'player_left') {
+          const player = playerState.get(message.id);
+          removePlayer(message.id);
+          if (player) addDebug(`server: ${player.name} left`, 'muted');
         } else if (message.type === 'move') {
+          const player = playerState.get(message.id);
+          upsertPlayer({
+            id: message.id,
+            name: player?.name ?? message.name,
+            photoURL: player?.photoURL ?? null,
+            x: message.x,
+            z: message.z,
+          });
           addDebug(`server: ${message.name} ${moveLabel[message.direction]} → (${message.x.toFixed(1)}, ${message.z.toFixed(1)})`, 'server');
         } else if (message.type === 'chat') {
           addDebug(`sendchat(): ${message.name} ${message.text}`, 'chat');
@@ -411,20 +694,33 @@
     }
 
     for (const button of moveButtons) {
-      button.addEventListener('click', () => sendMove(button.dataset.direction));
+      button.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        button.setPointerCapture(event.pointerId);
+        beginMovement(button.dataset.direction);
+      });
+      for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+        button.addEventListener(eventName, () => endMovement(button.dataset.direction));
+      }
     }
+    const keyDirection = {
+      ArrowUp: 'up', w: 'up', W: 'up',
+      ArrowDown: 'down', s: 'down', S: 'down',
+      ArrowLeft: 'left', a: 'left', A: 'left',
+      ArrowRight: 'right', d: 'right', D: 'right',
+    };
     document.addEventListener('keydown', event => {
-      if (event.repeat || event.target === input || event.ctrlKey || event.metaKey || event.altKey) return;
-      const direction = {
-        ArrowUp: 'up', w: 'up', W: 'up',
-        ArrowDown: 'down', s: 'down', S: 'down',
-        ArrowLeft: 'left', a: 'left', A: 'left',
-        ArrowRight: 'right', d: 'right', D: 'right',
-      }[event.key];
+      if (event.target === input || event.ctrlKey || event.metaKey || event.altKey) return;
+      const direction = keyDirection[event.key];
       if (!direction) return;
       event.preventDefault();
-      sendMove(direction);
+      if (!event.repeat) beginMovement(direction);
     });
+    document.addEventListener('keyup', event => {
+      const direction = keyDirection[event.key];
+      if (direction) endMovement(direction);
+    });
+    window.addEventListener('blur', stopAllMovement);
 
     document.getElementById('chat-form').addEventListener('submit', event => {
       event.preventDefault();

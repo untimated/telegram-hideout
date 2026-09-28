@@ -151,6 +151,21 @@ export function createHideoutServer(options = {}) {
   });
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 8192 });
   const positions = new Map();
+  const players = new Map();
+  const spawnPoints = [
+    { x: 0, z: 0 },
+    { x: -1.5, z: 0.8 },
+    { x: 1.5, z: 0.8 },
+    { x: -1.5, z: -1 },
+    { x: 1.5, z: -1 },
+  ];
+
+  function broadcast(message, except) {
+    const outgoing = JSON.stringify(message);
+    for (const peer of sockets.clients) {
+      if (peer !== except && peer.readyState === WebSocket.OPEN) peer.send(outgoing);
+    }
+  }
 
   server.on('upgrade', async (request, socket, head) => {
     if (new URL(request.url, 'http://localhost').pathname !== '/ws') {
@@ -175,9 +190,20 @@ export function createHideoutServer(options = {}) {
 
   sockets.on('connection', (client, session) => {
     client.on('error', error => console.error('WebSocket:', error.message));
-    const position = positions.get(session.id) ?? { x: 0, z: 0 };
+    const playerID = String(session.id);
+    const position = positions.get(session.id) ?? { ...spawnPoints[players.size % spawnPoints.length] };
     positions.set(session.id, position);
-    client.send(JSON.stringify({ type: 'welcome', name: session.name, position }));
+    const player = players.get(playerID) ?? { id: playerID };
+    Object.assign(player, {
+      name: session.name,
+      photoURL: session.photoURL ?? null,
+      x: position.x,
+      z: position.z,
+    });
+    client.playerID = playerID;
+    players.set(playerID, player);
+    client.send(JSON.stringify({ type: 'welcome', selfID: playerID, players: [...players.values()] }));
+    broadcast({ type: 'player_joined', player }, client);
     const expiration = setTimeout(() => client.close(1008, 'Session expired'), Math.max(0, (session.exp - now()) * 1000));
     const membership = session.guest ? null : setInterval(async () => {
       try {
@@ -187,7 +213,16 @@ export function createHideoutServer(options = {}) {
         client.close(1013, 'Membership check unavailable');
       }
     }, 5 * 60 * 1000);
-    client.on('close', () => { clearTimeout(expiration); clearInterval(membership); });
+    client.on('close', () => {
+      clearTimeout(expiration);
+      clearInterval(membership);
+      const stillConnected = [...sockets.clients].some(peer =>
+        peer !== client && peer.readyState === WebSocket.OPEN && peer.playerID === playerID);
+      if (!stillConnected) {
+        players.delete(playerID);
+        broadcast({ type: 'player_left', id: playerID });
+      }
+    });
     client.on('message', (data, isBinary) => {
       if (isBinary) return;
       let message;
@@ -196,7 +231,7 @@ export function createHideoutServer(options = {}) {
       if (message?.type === 'chat' && typeof message.text === 'string') {
         const text = message.text.trim();
         if (!text || text.length > 500) return;
-        outgoing = JSON.stringify({ type: 'chat', name: session.name, text });
+        outgoing = { type: 'chat', id: playerID, name: session.name, text };
       } else if (message?.type === 'move' && ['up', 'down', 'left', 'right'].includes(message.direction)) {
         const delta = {
           up: [0, -0.1],
@@ -204,21 +239,22 @@ export function createHideoutServer(options = {}) {
           left: [-0.1, 0],
           right: [0.1, 0],
         }[message.direction];
-        position.x = Math.round((position.x + delta[0]) * 10) / 10;
-        position.z = Math.round((position.z + delta[1]) * 10) / 10;
-        outgoing = JSON.stringify({
+        position.x = Math.max(-4, Math.min(4, Math.round((position.x + delta[0]) * 10) / 10));
+        position.z = Math.max(-3, Math.min(3, Math.round((position.z + delta[1]) * 10) / 10));
+        player.x = position.x;
+        player.z = position.z;
+        outgoing = {
           type: 'move',
+          id: playerID,
           name: session.name,
           direction: message.direction,
           x: position.x,
           z: position.z,
-        });
+        };
       } else {
         return;
       }
-      for (const peer of sockets.clients) {
-        if (peer.readyState === WebSocket.OPEN) peer.send(outgoing);
-      }
+      broadcast(outgoing);
     });
   });
   return { server, sockets };

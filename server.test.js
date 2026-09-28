@@ -104,11 +104,13 @@ test('only signed group members can connect and relay chat under their verified 
   const guestCookie = guestAuth.headers.get('set-cookie').split(';')[0];
   const guest = connect(guestCookie);
   assert.deepEqual(JSON.parse((await once(guest, 'message'))[0].toString()), {
-    type: 'welcome', name: 'Guest', position: { x: 0, z: 0 },
+    type: 'welcome',
+    selfID: String(Number.MAX_SAFE_INTEGER),
+    players: [{ id: String(Number.MAX_SAFE_INTEGER), name: 'Guest', photoURL: null, x: 0, z: 0 }],
   });
   guest.send(JSON.stringify({ type: 'move', direction: 'left' }));
   assert.deepEqual(JSON.parse((await once(guest, 'message'))[0].toString()), {
-    type: 'move', name: 'Guest', direction: 'left', x: -0.1, z: 0,
+    type: 'move', id: String(Number.MAX_SAFE_INTEGER), name: 'Guest', direction: 'left', x: -0.1, z: 0,
   });
   assert.equal(calls.length, callsBeforeGuest);
   const guestClosed = once(guest, 'close');
@@ -117,25 +119,49 @@ test('only signed group members can connect and relay chat under their verified 
 
   const a = connect(aCookie);
   const welcomeA = JSON.parse((await once(a, 'message'))[0].toString());
+  const bobJoined = once(a, 'message');
   const b = connect(bCookie);
   const welcomeB = JSON.parse((await once(b, 'message'))[0].toString());
-  assert.deepEqual(welcomeA, { type: 'welcome', name: '@alice', position: { x: 0, z: 0 } });
-  assert.deepEqual(welcomeB, { type: 'welcome', name: '@bob', position: { x: 0, z: 0 } });
+  assert.deepEqual(welcomeA, {
+    type: 'welcome',
+    selfID: '1',
+    players: [{ id: '1', name: '@alice', photoURL: null, x: 0, z: 0 }],
+  });
+  assert.deepEqual(welcomeB, {
+    type: 'welcome',
+    selfID: '2',
+    players: [
+      { id: '1', name: '@alice', photoURL: null, x: 0, z: 0 },
+      { id: '2', name: '@bob', photoURL: null, x: -1.5, z: 0.8 },
+    ],
+  });
+  assert.deepEqual(JSON.parse((await bobJoined)[0].toString()), {
+    type: 'player_joined',
+    player: { id: '2', name: '@bob', photoURL: null, x: -1.5, z: 0.8 },
+  });
 
   for (const [sender, name, text] of [[a, '@alice', 'hello from A'], [b, '@bob', 'hello from B']]) {
     const received = Promise.all([once(a, 'message'), once(b, 'message')]);
     sender.send(JSON.stringify({ type: 'chat', text, name: 'spoofed name' }));
     for (const [data] of await received) {
-      assert.deepEqual(JSON.parse(data.toString()), { type: 'chat', name, text });
+      assert.deepEqual(JSON.parse(data.toString()), { type: 'chat', id: name === '@alice' ? '1' : '2', name, text });
     }
   }
   for (const [direction, x, z] of [['right', 0.1, 0], ['up', 0.1, -0.1]]) {
     const registered = Promise.all([once(a, 'message'), once(b, 'message')]);
     a.send(JSON.stringify({ type: 'move', direction, x: 999, z: 999 }));
     for (const [data] of await registered) {
-      assert.deepEqual(JSON.parse(data.toString()), { type: 'move', name: '@alice', direction, x, z });
+      assert.deepEqual(JSON.parse(data.toString()), { type: 'move', id: '1', name: '@alice', direction, x, z });
     }
   }
+  let boundaryMove;
+  for (let step = 0; step < 45; step += 1) {
+    const registered = once(a, 'message');
+    a.send(JSON.stringify({ type: 'move', direction: 'right' }));
+    boundaryMove = JSON.parse((await registered)[0].toString());
+  }
+  assert.equal(boundaryMove.x, 4);
+  assert.equal(boundaryMove.z, -0.1);
   members.set('-100123:1', 'left');
   await refused(connect(aCookie), 403);
   assert.deepEqual(new Set(calls.map(call => call.chat_id)), new Set(['-100123', '-100456']));

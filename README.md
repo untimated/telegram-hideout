@@ -17,11 +17,18 @@ the Mini App. Chat uses the verified Telegram username, or first name when no
 username is available. The chat still has no saved history or game; messages
 sent while disconnected are not replayed.
 
-The current game shell places a responsive HUD over an empty Three.js renderer.
-Arrow buttons, arrow keys, and WASD send one discrete direction per press. The
-server applies a fixed `0.1` step and broadcasts the resulting position to every
-connected client; the on-screen input log distinguishes the local input from the
-server-registered move. Positions live only in the current server process.
+The current game shell places a responsive HUD over a small enclosed Three.js
+stage. Each connected player appears as a camera-facing profile-photo billboard,
+with a generated initials icon as fallback. The camera follows the local player;
+movement is interpolated between server positions. Join, move, and leave events
+keep the visible player set synchronized.
+
+Holding an arrow button, arrow key, or WASD sends at most one direction every
+`120ms`. The server applies a fixed `0.1` step, clamps positions inside the stage
+boundary, and broadcasts the result to every connected client. The on-screen
+input log distinguishes local input from server-registered movement. There is no
+object collision yet. Players and positions live only in the current server
+process.
 
 ## Debug guest access
 
