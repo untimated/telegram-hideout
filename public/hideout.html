@@ -2,95 +2,445 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>GossipBoy Hideout</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body { font: 16px system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
-    h1 { font-size: 24px; }
-    #status { color: #555; }
-    #chat { height: 320px; overflow-y: auto; border: 1px solid #aaa; padding: 12px; margin-bottom: 16px; }
-    #chat p { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
-    form { display: flex; gap: 8px; margin-top: 6px; }
-    input { flex: 1; min-width: 0; }
-    input, button { font: inherit; padding: 10px; }
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+      --ink: #fff8ee;
+      --panel: rgba(20, 15, 34, .72);
+      --panel-border: rgba(255, 255, 255, .26);
+      --accent: #ffca71;
+      --safe-top: max(18px, env(safe-area-inset-top));
+      --safe-bottom: max(16px, env(safe-area-inset-bottom));
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #17213c; }
+    button, input { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+
+    #app { position: relative; width: 100%; height: 100dvh; min-height: 420px; isolation: isolate; }
+    #scene {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 70% 24%, rgba(255, 167, 126, .38), transparent 28%),
+        linear-gradient(155deg, #3b4f81 0%, #573d75 48%, #1d2647 100%);
+    }
+    #scene canvas { display: block; width: 100%; height: 100%; }
+    #scene::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(to bottom, rgba(16, 12, 31, .08), transparent 40%, rgba(10, 9, 20, .42)),
+        radial-gradient(circle at center, transparent 38%, rgba(8, 10, 24, .25) 100%);
+    }
+
+    .hud { position: absolute; inset: 0; color: var(--ink); pointer-events: none; text-shadow: 0 2px 12px rgba(0, 0, 0, .4); }
+    .hud button, .hud input { pointer-events: auto; }
+
+    .room {
+      position: absolute;
+      top: var(--safe-top);
+      left: 24px;
+      display: grid;
+      gap: 5px;
+      font-weight: 800;
+      letter-spacing: .01em;
+    }
+    .room-name { font-size: clamp(17px, 2.6vw, 22px); text-decoration: underline; text-underline-offset: 5px; }
+    .clock-row { display: flex; align-items: center; gap: 9px; font-size: clamp(15px, 2.2vw, 19px); }
+    .diamond { width: 14px; height: 14px; border: 3px solid currentColor; transform: rotate(45deg); }
+
+    #status {
+      position: absolute;
+      top: var(--safe-top);
+      left: 50%;
+      translate: -50% 0;
+      max-width: min(46vw, 420px);
+      padding: 9px 14px;
+      border: 1px solid var(--panel-border);
+      border-radius: 999px;
+      background: rgba(17, 16, 33, .58);
+      backdrop-filter: blur(14px);
+      color: rgba(255, 248, 238, .82);
+      font-size: 12px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #status.connected { color: #d8ffd0; border-color: rgba(174, 255, 153, .4); }
+    #status.error { color: #ffd1c9; border-color: rgba(255, 123, 111, .58); }
+
+    .debug-panel {
+      position: absolute;
+      top: 118px;
+      left: 24px;
+      width: min(260px, 31vw);
+      min-width: 190px;
+      max-height: 42vh;
+      padding: 14px 15px;
+      overflow: hidden;
+      border: 2px solid rgba(255, 202, 113, .72);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: 0 16px 48px rgba(6, 5, 16, .3), inset 0 1px rgba(255, 255, 255, .08);
+      backdrop-filter: blur(12px);
+    }
+    .debug-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 9px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    #debug { display: grid; gap: 5px; font: 600 11px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .debug-line { overflow-wrap: anywhere; }
+    .debug-line.server { color: #c8ffba; }
+    .debug-line.chat { color: #ffd59b; }
+    .debug-line.muted { color: rgba(255, 255, 255, .55); }
+
+    #interaction {
+      position: absolute;
+      top: 19%;
+      left: 50%;
+      translate: -50% 0;
+      padding: 9px 18px;
+      border: 2px solid rgba(255, 255, 255, .7);
+      border-radius: 10px;
+      color: rgba(255, 255, 255, .76);
+      background: rgba(16, 13, 31, .28);
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+      backdrop-filter: blur(8px);
+    }
+
+    #bubble {
+      position: absolute;
+      top: 24%;
+      right: 8%;
+      width: min(290px, 38vw);
+      min-height: 92px;
+      padding: 18px 20px;
+      display: grid;
+      place-items: center;
+      border: 3px solid white;
+      border-radius: 28px;
+      background: rgba(26, 18, 43, .44);
+      box-shadow: 0 14px 42px rgba(5, 5, 15, .28);
+      backdrop-filter: blur(9px);
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.35;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(8px) scale(.97);
+      transition: opacity .2s ease, transform .2s ease;
+    }
+    #bubble::after {
+      content: "";
+      position: absolute;
+      bottom: -18px;
+      left: 30%;
+      width: 30px;
+      height: 30px;
+      border-right: 3px solid white;
+      border-bottom: 3px solid white;
+      background: rgba(26, 18, 43, .44);
+      transform: rotate(45deg);
+    }
+    #bubble.visible { opacity: 1; transform: none; }
+
+    .movement {
+      position: absolute;
+      left: 24px;
+      bottom: calc(var(--safe-bottom) + 76px);
+      display: grid;
+      grid-template-columns: repeat(3, 58px);
+      grid-template-rows: repeat(2, 58px);
+      gap: 6px;
+    }
+    .move {
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(255, 255, 255, .84);
+      border-radius: 14px;
+      background: rgba(20, 15, 34, .62);
+      color: white;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .24);
+      backdrop-filter: blur(10px);
+      font-size: 24px;
+      font-weight: 900;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    .move:active { transform: translateY(2px) scale(.96); background: rgba(255, 123, 111, .72); }
+    .move:disabled { opacity: .36; cursor: default; }
+    .move[data-direction="up"] { grid-column: 2; grid-row: 1; }
+    .move[data-direction="left"] { grid-column: 1; grid-row: 2; }
+    .move[data-direction="down"] { grid-column: 2; grid-row: 2; }
+    .move[data-direction="right"] { grid-column: 3; grid-row: 2; }
+
+    #chat-form {
+      position: absolute;
+      left: 50%;
+      bottom: var(--safe-bottom);
+      translate: -50% 0;
+      display: flex;
+      gap: 8px;
+      width: min(580px, calc(100% - 40px));
+      padding: 7px;
+      border: 2px solid rgba(255, 255, 255, .78);
+      border-radius: 15px;
+      background: rgba(21, 17, 38, .68);
+      box-shadow: 0 14px 42px rgba(4, 5, 14, .34);
+      backdrop-filter: blur(14px);
+    }
+    #message {
+      min-width: 0;
+      flex: 1;
+      border: 0;
+      outline: 0;
+      padding: 9px 11px;
+      background: transparent;
+      color: white;
+    }
+    #message::placeholder { color: rgba(255, 255, 255, .56); }
+    #send {
+      width: 44px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #352039;
+      font-size: 21px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    #send:disabled, #message:disabled { opacity: .42; }
+
+    @media (max-width: 620px) {
+      .room { left: 16px; }
+      #status { top: calc(var(--safe-top) + 64px); max-width: calc(100% - 32px); }
+      .debug-panel { top: 118px; left: 16px; width: 186px; min-width: 0; max-height: 34vh; padding: 11px; }
+      #interaction { display: none; }
+      #bubble { top: 25%; right: 16px; width: min(225px, 55vw); }
+      .movement { left: 16px; bottom: calc(var(--safe-bottom) + 76px); grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(2, 50px); }
+      #chat-form { width: calc(100% - 32px); }
+    }
   </style>
 </head>
 <body>
-  <h1>GossipBoy Hideout</h1>
-  <p id="status" role="status">Connecting…</p>
-  <div id="chat" role="log" aria-label="Group chat" aria-live="polite"></div>
-  <label for="message">Message</label>
-  <form id="form">
-    <input id="message" maxlength="500" autocomplete="off" placeholder="Say something…" required disabled>
-    <button id="send" disabled>Send</button>
-  </form>
+  <main id="app">
+    <div id="scene" aria-hidden="true"></div>
+    <div class="hud">
+      <header class="room">
+        <div class="room-name">Gossip Bar</div>
+        <div class="clock-row"><span id="clock">time --:--</span><span class="diamond"></span></div>
+      </header>
+
+      <div id="status" role="status">Starting Hideout…</div>
+
+      <section class="debug-panel" aria-label="Server input log">
+        <div class="debug-title"><span>input log</span><span>server</span></div>
+        <div id="debug" role="log" aria-live="polite"></div>
+      </section>
+
+      <div id="interaction">Nothing to interact with yet</div>
+      <div id="bubble" role="status" aria-live="polite"></div>
+
+      <nav class="movement" aria-label="Movement controls">
+        <button class="move" type="button" data-direction="up" aria-label="Move up" disabled>↑</button>
+        <button class="move" type="button" data-direction="left" aria-label="Move left" disabled>←</button>
+        <button class="move" type="button" data-direction="down" aria-label="Move down" disabled>↓</button>
+        <button class="move" type="button" data-direction="right" aria-label="Move right" disabled>→</button>
+      </nav>
+
+      <form id="chat-form">
+        <input id="message" maxlength="500" autocomplete="off" placeholder="Say something…" aria-label="Chat message" required disabled>
+        <button id="send" aria-label="Send message" disabled>➜</button>
+      </form>
+    </div>
+  </main>
+
   <script>
     const status = document.getElementById('status');
-    const chat = document.getElementById('chat');
+    const debug = document.getElementById('debug');
+    const bubble = document.getElementById('bubble');
     const input = document.getElementById('message');
     const send = document.getElementById('send');
+    const moveButtons = [...document.querySelectorAll('.move')];
+    const guestMode = new URLSearchParams(location.search).get('guest') === '1';
+    const moveLabel = {
+      up: 'MoveZ -0.1',
+      down: 'MoveZ +0.1',
+      left: 'MoveX -0.1',
+      right: 'MoveX +0.1',
+    };
     let socket;
+    let bubbleTimer;
+
+    function setStatus(text, state = '') {
+      status.textContent = text;
+      status.className = state;
+    }
+
+    function addDebug(text, kind = '') {
+      const line = document.createElement('div');
+      line.className = `debug-line ${kind}`;
+      line.textContent = text;
+      debug.append(line);
+      while (debug.children.length > 11) debug.firstElementChild.remove();
+    }
+
+    function showBubble(name, text) {
+      bubble.textContent = `${name}: ${text}`;
+      bubble.classList.add('visible');
+      clearTimeout(bubbleTimer);
+      bubbleTimer = setTimeout(() => bubble.classList.remove('visible'), 4200);
+    }
+
+    function setConnected(connected) {
+      input.disabled = send.disabled = !connected;
+      for (const button of moveButtons) button.disabled = !connected;
+    }
+
+    async function startThree() {
+      try {
+        const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js');
+        const host = document.getElementById('scene');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x273556);
+        const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 100);
+        camera.position.set(0, 1.6, 4);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        host.prepend(renderer.domElement);
+        const resize = () => {
+          const width = host.clientWidth;
+          const height = host.clientHeight;
+          renderer.setSize(width, height, false);
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+          renderer.render(scene, camera);
+        };
+        new ResizeObserver(resize).observe(host);
+        resize();
+        addDebug('three.js: renderer ready', 'muted');
+      } catch {
+        addDebug('three.js: renderer unavailable', 'muted');
+      }
+    }
+
+    function sendMove(direction) {
+      if (socket?.readyState !== WebSocket.OPEN) return;
+      addDebug(`input: ${moveLabel[direction]}`);
+      socket.send(JSON.stringify({ type: 'move', direction }));
+    }
 
     async function connect() {
       const telegram = window.Telegram?.WebApp;
-      if (!telegram?.initData) {
-        status.textContent = 'Open Hideout from its link inside Telegram.';
+      if (!guestMode && !telegram?.initData) {
+        setStatus('Open Hideout from its link inside Telegram.', 'error');
+        addDebug('auth: no Telegram init data', 'muted');
         return;
       }
-      telegram.ready();
-      status.textContent = 'Checking Telegram access…';
+      telegram?.ready();
+      telegram?.expand();
+      setStatus(guestMode ? 'Checking debug guest access…' : 'Checking Telegram access…');
       let response;
       try {
-        response = await fetch('/auth', {
+        response = guestMode ? await fetch('/auth/guest', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
-          body: JSON.stringify({ initData: telegram.initData }),
-        });
+        }) : await fetch('/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ initData: telegram.initData }),
+          });
       } catch {
-        status.textContent = 'Could not reach Hideout. Retrying…';
+        setStatus('Could not reach Hideout. Retrying…', 'error');
         setTimeout(connect, 5000);
         return;
       }
       if (!response.ok) {
-        status.textContent = response.status === 403 ? 'This Telegram account is not in the allowed group.' :
-          response.status === 401 ? 'Telegram login could not be verified. Close and reopen Hideout.' :
-          'Could not check group membership. Try opening Hideout again.';
+        setStatus(guestMode && response.status === 401 ? 'Guest credentials rejected. Reload and try again.' :
+          response.status === 403 ? 'This account is not in an allowed group.' :
+          response.status === 401 ? 'Telegram login could not be verified. Reopen Hideout.' :
+          'Could not check group membership. Reopen Hideout.', 'error');
         return;
       }
+
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       socket = new WebSocket(`${protocol}//${location.host}/ws`);
       socket.onmessage = event => {
-        const message = JSON.parse(event.data);
+        let message;
+        try { message = JSON.parse(event.data); } catch { return; }
         if (message.type === 'welcome') {
-          status.textContent = `Connected as ${message.name}`;
-          input.disabled = send.disabled = false;
-          input.focus();
+          const { x = 0, z = 0 } = message.position || {};
+          setStatus(`Connected as ${message.name}`, 'connected');
+          setConnected(true);
+          if (guestMode) addDebug('auth: debug guest access', 'muted');
+          addDebug(`server: joined at (${x.toFixed(1)}, ${z.toFixed(1)})`, 'server');
+        } else if (message.type === 'move') {
+          addDebug(`server: ${message.name} ${moveLabel[message.direction]} → (${message.x.toFixed(1)}, ${message.z.toFixed(1)})`, 'server');
         } else if (message.type === 'chat') {
-          const line = document.createElement('p');
-          line.textContent = `${message.name}: ${message.text}`;
-          chat.append(line);
-          if (chat.children.length > 200) chat.firstElementChild.remove();
-          chat.scrollTop = chat.scrollHeight;
+          addDebug(`sendchat(): ${message.name} ${message.text}`, 'chat');
+          showBubble(message.name, message.text);
         }
       };
       socket.onclose = () => {
-        input.disabled = send.disabled = true;
-        status.textContent = 'Disconnected. Reconnecting…';
+        setConnected(false);
+        setStatus('Disconnected. Reconnecting…', 'error');
+        addDebug('socket: disconnected', 'muted');
         setTimeout(connect, 1500);
       };
       socket.onerror = () => socket.close();
     }
 
-    document.getElementById('form').onsubmit = event => {
+    for (const button of moveButtons) {
+      button.addEventListener('click', () => sendMove(button.dataset.direction));
+    }
+    document.addEventListener('keydown', event => {
+      if (event.repeat || event.target === input || event.ctrlKey || event.metaKey || event.altKey) return;
+      const direction = {
+        ArrowUp: 'up', w: 'up', W: 'up',
+        ArrowDown: 'down', s: 'down', S: 'down',
+        ArrowLeft: 'left', a: 'left', A: 'left',
+        ArrowRight: 'right', d: 'right', D: 'right',
+      }[event.key];
+      if (!direction) return;
+      event.preventDefault();
+      sendMove(direction);
+    });
+
+    document.getElementById('chat-form').addEventListener('submit', event => {
       event.preventDefault();
       const text = input.value.trim();
-      if (!text || socket.readyState !== WebSocket.OPEN) return;
+      if (!text || socket?.readyState !== WebSocket.OPEN) return;
       socket.send(JSON.stringify({ type: 'chat', text }));
       input.value = '';
-      input.focus();
-    };
+    });
+
+    function updateClock() {
+      document.getElementById('clock').textContent = `time ${new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit' }).format(new Date())}`;
+    }
+    updateClock();
+    setInterval(updateClock, 30000);
+    addDebug('client: booting…', 'muted');
+    startThree();
     connect();
   </script>
 </body>

@@ -28,6 +28,8 @@ test('only signed group members can connect and relay chat under their verified 
   const { server, sockets } = createHideoutServer({
     botToken,
     groupID: '-100123, -100456',
+    debugGuestUsername: 'debug',
+    debugGuestPassword: 'secret',
     now: () => now,
     fetchImpl: async (_url, options) => {
       const request = JSON.parse(options.body);
@@ -50,6 +52,13 @@ test('only signed group members can connect and relay chat under their verified 
   const page = await fetch(`${origin}/hideout`);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /telegram-web-app.js/);
+  const guestAuthorization = `Basic ${Buffer.from('debug:secret').toString('base64')}`;
+  const guestChallenge = await fetch(`${origin}/hideout?guest=1`);
+  assert.equal(guestChallenge.status, 401);
+  assert.match(guestChallenge.headers.get('www-authenticate'), /Hideout Debug/);
+  assert.equal((await fetch(`${origin}/hideout?guest=1`, {
+    headers: { Authorization: guestAuthorization },
+  })).status, 200);
 
   async function auth(initData) {
     return fetch(`${origin}/auth`, {
@@ -82,18 +91,49 @@ test('only signed group members can connect and relay chat under their verified 
   await refused(connect(`${aCookie}x`), 401);
   await refused(new WebSocket(`ws://${base}/ws`, { headers: { Origin: 'https://other.example', Cookie: aCookie } }), 401);
 
+  assert.equal((await fetch(`${origin}/auth/guest`, {
+    method: 'POST',
+    headers: { Origin: origin, Authorization: `Basic ${Buffer.from('debug:wrong').toString('base64')}` },
+  })).status, 401);
+  const callsBeforeGuest = calls.length;
+  const guestAuth = await fetch(`${origin}/auth/guest`, {
+    method: 'POST',
+    headers: { Origin: origin, Authorization: guestAuthorization },
+  });
+  assert.equal(guestAuth.status, 200);
+  const guestCookie = guestAuth.headers.get('set-cookie').split(';')[0];
+  const guest = connect(guestCookie);
+  assert.deepEqual(JSON.parse((await once(guest, 'message'))[0].toString()), {
+    type: 'welcome', name: 'Guest', position: { x: 0, z: 0 },
+  });
+  guest.send(JSON.stringify({ type: 'move', direction: 'left' }));
+  assert.deepEqual(JSON.parse((await once(guest, 'message'))[0].toString()), {
+    type: 'move', name: 'Guest', direction: 'left', x: -0.1, z: 0,
+  });
+  assert.equal(calls.length, callsBeforeGuest);
+  const guestClosed = once(guest, 'close');
+  guest.terminate();
+  await guestClosed;
+
   const a = connect(aCookie);
   const welcomeA = JSON.parse((await once(a, 'message'))[0].toString());
   const b = connect(bCookie);
   const welcomeB = JSON.parse((await once(b, 'message'))[0].toString());
-  assert.equal(welcomeA.name, '@alice');
-  assert.equal(welcomeB.name, '@bob');
+  assert.deepEqual(welcomeA, { type: 'welcome', name: '@alice', position: { x: 0, z: 0 } });
+  assert.deepEqual(welcomeB, { type: 'welcome', name: '@bob', position: { x: 0, z: 0 } });
 
   for (const [sender, name, text] of [[a, '@alice', 'hello from A'], [b, '@bob', 'hello from B']]) {
     const received = Promise.all([once(a, 'message'), once(b, 'message')]);
     sender.send(JSON.stringify({ type: 'chat', text, name: 'spoofed name' }));
     for (const [data] of await received) {
       assert.deepEqual(JSON.parse(data.toString()), { type: 'chat', name, text });
+    }
+  }
+  for (const [direction, x, z] of [['right', 0.1, 0], ['up', 0.1, -0.1]]) {
+    const registered = Promise.all([once(a, 'message'), once(b, 'message')]);
+    a.send(JSON.stringify({ type: 'move', direction, x: 999, z: 999 }));
+    for (const [data] of await registered) {
+      assert.deepEqual(JSON.parse(data.toString()), { type: 'move', name: '@alice', direction, x, z });
     }
   }
   members.set('-100123:1', 'left');
@@ -108,4 +148,9 @@ test('rejects malformed group ID lists at startup', () => {
   for (const groupID of ['', '-100123,', '-100123,abc']) {
     assert.throws(() => createHideoutServer({ botToken, groupID }), /ALLOWED_GROUP_ID/);
   }
+  assert.throws(() => createHideoutServer({
+    botToken,
+    groupID: '-100123',
+    debugGuestUsername: 'debug',
+  }), /DEBUG_GUEST/);
 });

@@ -44,7 +44,9 @@ function sessionKey(botToken) {
 }
 
 export function makeSession(user, botToken, nowSeconds = Math.floor(Date.now() / 1000)) {
-  const payload = Buffer.from(JSON.stringify({ id: user.id, name: user.name, exp: nowSeconds + sessionMaxAgeSeconds })).toString('base64url');
+  const session = { id: user.id, name: user.name, exp: nowSeconds + sessionMaxAgeSeconds };
+  if (user.guest === true) session.guest = true;
+  const payload = Buffer.from(JSON.stringify(session)).toString('base64url');
   return `${payload}.${mac(sessionKey(botToken), payload).toString('hex')}`;
 }
 

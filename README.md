@@ -17,6 +17,27 @@ the Mini App. Chat uses the verified Telegram username, or first name when no
 username is available. The chat still has no saved history or game; messages
 sent while disconnected are not replayed.
 
+The current game shell places a responsive HUD over an empty Three.js renderer.
+Arrow buttons, arrow keys, and WASD send one discrete direction per press. The
+server applies a fixed `0.1` step and broadcasts the resulting position to every
+connected client; the on-screen input log distinguishes the local input from the
+server-registered move. Positions live only in the current server process.
+
+## Debug guest access
+
+For testing outside Telegram, set both `DEBUG_GUEST_USERNAME` and
+`DEBUG_GUEST_PASSWORD` on the Hideout service, then open:
+
+```text
+https://YOUR-CLOUD-RUN-URL/hideout?guest=1
+```
+
+The browser shows its native Basic Auth prompt. Valid credentials create a
+signed one-hour session named `Guest`, which can use chat and movement without a
+Telegram membership lookup. The ordinary `/hideout` URL still requires Telegram.
+Leave both debug variables unset to remove the guest route; keep the password in
+Secret Manager and use this only over HTTPS.
+
 If the Mini App says its Telegram login could not be verified, close it fully and
 launch it again from Telegram. A repeated `401` also means the Hideout service's
 `TELEGRAM_BOT_TOKEN` may not belong to the bot whose Mini App was opened. Group
