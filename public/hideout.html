@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GossipBoy Hideout</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 24px; }
+    #status { color: #555; }
+    #chat { height: 320px; overflow-y: auto; border: 1px solid #aaa; padding: 12px; margin-bottom: 16px; }
+    #chat p { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    form { display: flex; gap: 8px; margin-top: 6px; }
+    input { flex: 1; min-width: 0; }
+    input, button { font: inherit; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h1>GossipBoy Hideout</h1>
+  <p id="status" role="status">Connecting…</p>
+  <div id="chat" role="log" aria-label="Group chat" aria-live="polite"></div>
+  <label for="message">Message</label>
+  <form id="form">
+    <input id="message" maxlength="500" autocomplete="off" placeholder="Say something…" required disabled>
+    <button id="send" disabled>Send</button>
+  </form>
+  <script>
+    const status = document.getElementById('status');
+    const chat = document.getElementById('chat');
+    const input = document.getElementById('message');
+    const send = document.getElementById('send');
+    let socket;
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      socket = new WebSocket(`${protocol}//${location.host}/ws`);
+      socket.onmessage = event => {
+        const message = JSON.parse(event.data);
+        if (message.type === 'welcome') {
+          status.textContent = `Connected as ${message.name}`;
+          input.disabled = send.disabled = false;
+          input.focus();
+        } else if (message.type === 'chat') {
+          const line = document.createElement('p');
+          line.textContent = `${message.name}: ${message.text}`;
+          chat.append(line);
+          if (chat.children.length > 200) chat.firstElementChild.remove();
+          chat.scrollTop = chat.scrollHeight;
+        }
+      };
+      socket.onclose = () => {
+        input.disabled = send.disabled = true;
+        status.textContent = 'Disconnected. Reconnecting…';
+        setTimeout(connect, 1500);
+      };
+      socket.onerror = () => socket.close();
+    }
+
+    document.getElementById('form').onsubmit = event => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text || socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({ type: 'chat', text }));
+      input.value = '';
+      input.focus();
+    };
+    connect();
+  </script>
+</body>
+</html>
