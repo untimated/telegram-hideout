@@ -1,17 +1,19 @@
-# Telegram Hideout relay prototype
+# Telegram Hideout
 
-Install dependencies with `pnpm install`, then run `pnpm start` (or `node server.js`).
-Open http://localhost:8080/hideout in two tabs or browser windows. Each connection
-gets its own guest name. Send a message from either tab: both logs should show
-the same server-delivered message, including the sender's tab.
+Install dependencies with `pnpm install`, set `TELEGRAM_BOT_TOKEN` and numeric
+`ALLOWED_GROUP_ID`, then run `pnpm start` (or `node server.js`). Open the page
+through the BotFather Mini App link. A plain browser URL cannot authenticate.
 
 Run `pnpm test` for the HTTP and two-client relay check.
 
-This prototype has no Telegram login, membership checks, saved history, or game.
-It is a local flow test; anyone who can reach it can join. Refreshing clears the
-tab's log and assigns a new guest identity. Disconnected tabs reconnect automatically;
-messages sent while they are offline are not replayed. Restarting the server resets
-guest numbering. All clients must connect to the same server process to share a room.
+Hideout validates Telegram's signed Mini App `initData` and checks the configured
+group with `getChatMember`. Prato must be a group administrator for this lookup
+to be reliable. Only current members receive a one-hour session cookie. The
+WebSocket checks that session and group membership before joining, then checks
+membership every five minutes. Expired login data requires closing and reopening
+the Mini App. Chat uses the verified Telegram username, or first name when no
+username is available. The chat still has no saved history or game; messages
+sent while disconnected are not replayed.
 
 The server listens on `0.0.0.0` and uses `PORT` (default `8080`). No cloud deployment
 is required for local testing.
@@ -25,18 +27,22 @@ does not need a separate `cloudbuild.yaml` or Dockerfile. The Node buildpack rea
 
 For the first shared-room test, use these service settings:
 
-- Allow public access so browsers can load the page and connect to `/ws`.
+- Allow public access so Telegram can load the page; `/auth` and `/ws` enforce
+  Telegram membership themselves.
+- Configure `TELEGRAM_BOT_TOKEN` as a secret on this service and set
+  `ALLOWED_GROUP_ID` to the numeric group ID. Use the same bot configured in
+  BotFather. No guest bypass is available.
 - Request-based billing and minimum instances `0` are fine for the prototype.
 - Set maximum instances to `1` while chat state lives only in one process.
 - Increase the request timeout for WebSocket sessions (for example, `3600` seconds).
 - Keep HTTP/2 end-to-end disabled for WebSockets.
 
-Open `https://YOUR_SERVICE_URL/hideout` in two browsers and send a message from
-each. A new Cloud Run revision or instance restart clears the room. Maximum
+Open the BotFather Mini App link from two Telegram accounts and send a message
+from each. A new Cloud Run revision or instance restart clears the room. Maximum
 instances `1` is only a prototype aid: Cloud Run can temporarily exceed an
 instance limit, and different revisions can coexist during deployment. Shared
 state across instances will be needed before treating this as a reliable room.
 
-The service is **public and unauthenticated** at this stage. Do not share its URL
-as a members-only room until Telegram identity and membership checks protect
-both the page's login flow and the WebSocket connection.
+On the Prato bot service, set `HIDEOUT_MINI_APP_URL` to the exact BotFather link.
+The `/hideout` command then replies with an Enter Hideout button. Push and deploy
+both repositories before testing the command and the new access checks.

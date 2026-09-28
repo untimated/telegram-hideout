@@ -2,36 +2,120 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
+import { makeSession, readSession, sessionCookie, verifyInitData } from './auth.js';
 
-export function createHideoutServer() {
+function sameOrigin(request) {
+  const origin = request.headers.origin;
+  if (!origin) return false;
+  try {
+    const url = new URL(origin);
+    const forwarded = request.headers['x-forwarded-proto'];
+    return url.host === request.headers.host &&
+      (url.protocol === 'https:' || (url.protocol === 'http:' && forwarded !== 'https'));
+  } catch {
+    return false;
+  }
+}
+
+function rejectUpgrade(socket, status, reason) {
+  socket.end(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\n\r\n`);
+}
+
+export function createHideoutServer(options = {}) {
+  const botToken = options.botToken ?? process.env.TELEGRAM_BOT_TOKEN;
+  const groupID = options.groupID ?? process.env.ALLOWED_GROUP_ID;
+  const telegramAPIBase = options.telegramAPIBase ?? 'https://api.telegram.org';
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const now = options.now ?? (() => Math.floor(Date.now() / 1000));
+  if (!botToken || !/^-?\d+$/.test(String(groupID || ''))) {
+    throw new Error('TELEGRAM_BOT_TOKEN and numeric ALLOWED_GROUP_ID are required');
+  }
+
+  async function isGroupMember(userID) {
+    const response = await fetchImpl(`${telegramAPIBase}/bot${botToken}/getChatMember`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: groupID, user_id: userID }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) throw new Error(`getChatMember HTTP ${response.status}`);
+    const result = await response.json();
+    if (!result.ok) throw new Error(`getChatMember rejected (${result.error_code || 'unknown'})`);
+    const member = result.result;
+    return member?.status === 'creator' || member?.status === 'administrator' || member?.status === 'member' ||
+      (member?.status === 'restricted' && member.is_member === true);
+  }
+
   const page = readFileSync(new URL('./public/hideout.html', import.meta.url));
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
     const path = new URL(request.url, 'http://localhost').pathname;
     if (request.method === 'GET' && path === '/') {
       response.writeHead(302, { Location: '/hideout' }).end();
     } else if (request.method === 'GET' && (path === '/hideout' || path === '/hideout/')) {
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(page);
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }).end(page);
+    } else if (request.method === 'POST' && path === '/auth') {
+      if (!sameOrigin(request) || !request.headers['content-type']?.startsWith('application/json')) {
+        response.writeHead(403).end('Forbidden');
+        return;
+      }
+      let body = '';
+      for await (const chunk of request) {
+        body += chunk;
+        if (body.length > 16384) { response.writeHead(413).end('Too large'); return; }
+      }
+      let initData;
+      try { initData = JSON.parse(body).initData; } catch { /* Invalid JSON. */ }
+      const user = verifyInitData(initData, botToken, now());
+      if (!user) { response.writeHead(401).end('Invalid or expired Telegram login'); return; }
+      let member;
+      try { member = await isGroupMember(user.id); } catch (error) {
+        console.error('Membership check:', error.message);
+        response.writeHead(503).end('Membership check unavailable');
+        return;
+      }
+      if (!member) { response.writeHead(403).end('Group membership required'); return; }
+      response.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+        'Set-Cookie': sessionCookie(makeSession(user, botToken, now())),
+      }).end(JSON.stringify({ name: user.name }));
     } else {
       response.writeHead(404).end('Not found');
     }
   });
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 8192 });
-  let nextGuest = 1;
 
-  server.on('upgrade', (request, socket, head) => {
+  server.on('upgrade', async (request, socket, head) => {
     if (new URL(request.url, 'http://localhost').pathname !== '/ws') {
-      socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+      rejectUpgrade(socket, 404, 'Not Found');
+      return;
+    }
+    const session = sameOrigin(request) && readSession(request.headers.cookie, botToken, now());
+    if (!session) { rejectUpgrade(socket, 401, 'Unauthorized'); return; }
+    try {
+      if (!await isGroupMember(session.id)) { rejectUpgrade(socket, 403, 'Forbidden'); return; }
+    } catch (error) {
+      console.error('Membership check:', error.message);
+      rejectUpgrade(socket, 503, 'Service Unavailable');
       return;
     }
     sockets.handleUpgrade(request, socket, head, client => {
-      sockets.emit('connection', client);
+      sockets.emit('connection', client, session);
     });
   });
 
-  sockets.on('connection', client => {
-    const name = `Guest ${nextGuest++}`;
+  sockets.on('connection', (client, session) => {
     client.on('error', error => console.error('WebSocket:', error.message));
-    client.send(JSON.stringify({ type: 'welcome', name }));
+    client.send(JSON.stringify({ type: 'welcome', name: session.name }));
+    const expiration = setTimeout(() => client.close(1008, 'Session expired'), Math.max(0, (session.exp - now()) * 1000));
+    const membership = setInterval(async () => {
+      try {
+        if (!await isGroupMember(session.id)) client.close(1008, 'Group membership required');
+      } catch {
+        client.close(1013, 'Membership check unavailable');
+      }
+    }, 5 * 60 * 1000);
+    client.on('close', () => { clearTimeout(expiration); clearInterval(membership); });
     client.on('message', (data, isBinary) => {
       if (isBinary) return;
       let message;
@@ -39,7 +123,7 @@ export function createHideoutServer() {
       if (message?.type !== 'chat' || typeof message.text !== 'string') return;
       const text = message.text.trim();
       if (!text || text.length > 500) return;
-      const outgoing = JSON.stringify({ type: 'chat', name, text });
+      const outgoing = JSON.stringify({ type: 'chat', name: session.name, text });
       for (const peer of sockets.clients) {
         if (peer.readyState === WebSocket.OPEN) peer.send(outgoing);
       }
