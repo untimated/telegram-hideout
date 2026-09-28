@@ -18,26 +18,31 @@ username is available. The chat still has no saved history or game; messages
 sent while disconnected are not replayed.
 
 The current game shell places a responsive HUD over a small enclosed Three.js
-stage. Each connected player appears as a camera-facing profile-photo billboard,
-with a generated initials icon as fallback. The perspective camera sits at the
-local player's eye level; your own billboard is hidden. Drag the scene with a
+stage. Each connected player appears as a solid-color capsule with a smaller
+camera-facing profile photo above it, or generated initials when no photo is
+available. The perspective camera sits at the local player's eye level; your
+own capsule is hidden. Drag the scene with a
 mouse or finger to look around. Join, move, and leave events keep the visible
 player set synchronized, with movement interpolated between server positions.
 
 Telegram photos load through an authenticated same-origin route. The server
 uses `getUserProfilePhotos` and `getFile`, caches the image briefly, and keeps
 token-bearing Telegram download URLs private. If the bot cannot retrieve a
-photo, the client tries the signed Mini App photo URL, then retains initials.
-Guests also use initials. No additional environment variables are needed.
+photo, the server tries Telegram's signed Mini App photo URL from a Telegram
+host, then the client retains initials. Profile-photo privacy settings can
+still prevent access. Guests also use initials. No additional environment
+variables are needed.
 
 Holding an arrow button, arrow key, or WASD sends at most one direction every
-`150ms`, including rapid direction changes. Up/W move forward, Down/S backward,
+`200ms`, including rapid direction changes. Up/W move forward, Down/S backward,
 and Left/A and Right/D strafe relative to the camera heading. Looking up or down
 does not change walking speed. Typing in chat or leaving the window stops held
-movement. The server enforces a `120ms` minimum between steps per player, applies
-a fixed `0.1` step using the submitted heading, clamps positions inside the stage
-boundary, and broadcasts the result. The input log distinguishes local input
-from server-registered movement. There is no object collision yet. Players and
+movement. The server enforces a `160ms` minimum between steps per player, applies
+a fixed `0.3` step using the submitted heading, clamps positions inside the stage
+boundary, and broadcasts the result. While a direction is held, the local camera
+moves smoothly every frame at roughly the same speed; on release it eases toward
+the last server position. The input log distinguishes local input from
+server-registered movement. There is no object collision yet. Players and
 positions live only in the current server process.
 
 ## Debug guest access

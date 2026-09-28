@@ -116,7 +116,7 @@ export function createHideoutServer(options = {}) {
       const id = path.slice('/avatars/'.length);
       if (!players.get(id)?.avatarURL) { response.writeHead(404).end('Photo unavailable'); return; }
       try {
-        const photo = await avatars.get(id);
+        const photo = await avatars.get(id, players.get(id).photoURL);
         if (!photo) { response.writeHead(404, { 'Cache-Control': 'no-store' }).end('Photo unavailable'); return; }
         response.writeHead(200, {
           'Content-Type': photo.type,
@@ -265,13 +265,13 @@ export function createHideoutServer(options = {}) {
         const yaw = message.yaw ?? 0;
         if (typeof yaw !== 'number' || !Number.isFinite(yaw) || Math.abs(yaw) > Math.PI) return;
         const time = moveNow();
-        if (time - (movementTimes.get(playerID) ?? -Infinity) < 120) return;
+        if (time - (movementTimes.get(playerID) ?? -Infinity) < 160) return;
         movementTimes.set(playerID, time);
         const delta = {
-          up: [0, -0.1],
-          down: [0, 0.1],
-          left: [-0.1, 0],
-          right: [0.1, 0],
+          up: [0, -0.3],
+          down: [0, 0.3],
+          left: [-0.3, 0],
+          right: [0.3, 0],
         }[message.direction];
         // Rotate the fixed local step around Y; clients cannot choose distance/speed.
         const dx = delta[0] * Math.cos(yaw) + delta[1] * Math.sin(yaw);

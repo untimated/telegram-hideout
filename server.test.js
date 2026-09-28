@@ -124,7 +124,7 @@ test('only signed group members can connect and relay chat under their verified 
   });
   guest.send(JSON.stringify({ type: 'move', direction: 'left' }));
   assert.deepEqual(JSON.parse((await once(guest, 'message'))[0].toString()), {
-    type: 'move', id: String(Number.MAX_SAFE_INTEGER), name: 'Guest', direction: 'left', x: -0.1, z: 0,
+    type: 'move', id: String(Number.MAX_SAFE_INTEGER), name: 'Guest', direction: 'left', x: -0.3, z: 0,
   });
   assert.equal(calls.length, callsBeforeGuest);
   const guestClosed = once(guest, 'close');
@@ -172,8 +172,8 @@ test('only signed group members can connect and relay chat under their verified 
       assert.deepEqual(JSON.parse(data.toString()), { type: 'chat', id: name === '@alice' ? '1' : '2', name, text });
     }
   }
-  for (const [direction, x, z] of [['right', 0.1, 0], ['up', 0.1, -0.1]]) {
-    moveTime += 150;
+  for (const [direction, x, z] of [['right', 0.3, 0], ['up', 0.3, -0.3]]) {
+    moveTime += 200;
     const registered = Promise.all([once(a, 'message'), once(b, 'message')]);
     a.send(JSON.stringify({ type: 'move', direction, x: 999, z: 999 }));
     for (const [data] of await registered) {
@@ -190,11 +190,11 @@ test('only signed group members can connect and relay chat under their verified 
   for (const [data] of await barrier) assert.equal(JSON.parse(data).type, 'chat');
 
   for (const [yaw, direction, x, z] of [
-    [-Math.PI / 2, 'up', .2, -.1],
-    [-Math.PI / 2, 'right', .2, 0],
-    [Math.PI / 4, 'up', .129289, -.070711],
+    [-Math.PI / 2, 'up', .6, -.3],
+    [-Math.PI / 2, 'right', .6, 0],
+    [Math.PI / 4, 'up', .387868, -.212132],
   ]) {
-    moveTime += 150;
+    moveTime += 200;
     const received = Promise.all([once(a, 'message'), once(b, 'message')]);
     a.send(JSON.stringify({ type: 'move', direction, yaw, x: 999, z: 999 }));
     for (const [data] of await received) {
@@ -205,13 +205,13 @@ test('only signed group members can connect and relay chat under their verified 
   }
   let boundaryMove;
   for (let step = 0; step < 45; step += 1) {
-    moveTime += 150;
+    moveTime += 200;
     const registered = once(a, 'message');
     a.send(JSON.stringify({ type: 'move', direction: 'right' }));
     boundaryMove = JSON.parse((await registered)[0].toString());
   }
   assert.equal(boundaryMove.x, 4);
-  assert.equal(boundaryMove.z, -.070711);
+  assert.equal(boundaryMove.z, -.212132);
   members.set('-100123:1', 'left');
   await refused(connect(aCookie), 403);
   assert.deepEqual(new Set(calls.map(call => call.chat_id)), new Set(['-100123', '-100456']));

@@ -303,7 +303,18 @@
     const heldDirections = new Map();
     let movementTimer;
     let lastMoveAt = -Infinity;
-    const moveInterval = 150;
+    const moveInterval = 200;
+    const moveStep = .3;
+    const walkSpeed = moveStep * 1000 / moveInterval;
+
+    function applyMove(position, direction, heading, distance) {
+      const forward = direction === 'up' ? -distance : direction === 'down' ? distance : 0;
+      const strafe = direction === 'left' ? -distance : direction === 'right' ? distance : 0;
+      return {
+        x: Math.max(-4, Math.min(4, position.x + strafe * Math.cos(heading) + forward * Math.sin(heading))),
+        z: Math.max(-3, Math.min(3, position.z - strafe * Math.sin(heading) + forward * Math.cos(heading))),
+      };
+    }
 
     function setStatus(text, state = '') {
       status.textContent = text;
@@ -438,7 +449,7 @@
         function colorFor(name) {
           let hash = 0;
           for (const character of name) hash = (hash * 31 + character.charCodeAt(0)) | 0;
-          return `hsl(${Math.abs(hash) % 360} 58% 48%)`;
+          return `hsl(${Math.abs(hash) % 360}, 58%, 48%)`;
         }
 
         function avatarTexture(player) {
@@ -468,11 +479,16 @@
           if (sources.length) {
             const image = new Image();
             let disposed = false;
+            let objectURL;
+            function releaseImageURL() {
+              if (objectURL) URL.revokeObjectURL(objectURL);
+              objectURL = undefined;
+            }
             texture.addEventListener('dispose', () => {
               disposed = true;
               image.onload = image.onerror = null;
+              releaseImageURL();
             });
-            image.crossOrigin = 'anonymous';
             image.referrerPolicy = 'no-referrer';
             image.onload = () => {
               if (disposed || !image.naturalWidth || !image.naturalHeight) return;
@@ -488,14 +504,42 @@
               context.restore();
               drawFrame();
               texture.needsUpdate = true;
+              releaseImageURL();
               addDebug(`avatar: ${player.name} photo loaded`, 'muted');
             };
             image.onerror = () => {
               if (disposed) return;
-              if (sources.length) image.src = sources.shift();
-              else addDebug(`avatar: ${player.name} using initials (photo unavailable)`, 'muted');
+              releaseImageURL();
+              loadNext();
             };
-            image.src = sources.shift();
+            async function loadNext() {
+              if (disposed) return;
+              const source = sources.shift();
+              if (!source) {
+                addDebug(`avatar: ${player.name} using initials (photo unavailable)`, 'muted');
+                return;
+              }
+              if (source.startsWith('/avatars/')) {
+                try {
+                  const response = await fetch(source, { credentials: 'same-origin' });
+                  if (disposed) return;
+                  if (!response.ok) {
+                    addDebug(`avatar: ${player.name} photo HTTP ${response.status}`, 'muted');
+                    loadNext();
+                    return;
+                  }
+                  objectURL = URL.createObjectURL(await response.blob());
+                  if (disposed) { releaseImageURL(); return; }
+                  image.src = objectURL;
+                } catch {
+                  loadNext();
+                }
+              } else {
+                image.crossOrigin = 'anonymous';
+                image.src = source;
+              }
+            }
+            loadNext();
           }
           return texture;
         }
@@ -528,7 +572,7 @@
           group.userData.target = new THREE.Vector3(player.x, 0, player.z);
 
           const shadow = new THREE.Mesh(
-            new THREE.CircleGeometry(.48, 32),
+            new THREE.CircleGeometry(.34, 32),
             new THREE.MeshBasicMaterial({ color: 0x080912, transparent: true, opacity: .34, depthWrite: false }),
           );
           shadow.rotation.x = -Math.PI / 2;
@@ -536,7 +580,7 @@
           group.add(shadow);
 
           const ring = new THREE.Mesh(
-            new THREE.RingGeometry(.52, .61, 32),
+            new THREE.RingGeometry(.36, .42, 32),
             new THREE.MeshBasicMaterial({ color: 0x91a0c8, side: THREE.DoubleSide }),
           );
           ring.rotation.x = -Math.PI / 2;
@@ -544,20 +588,29 @@
           ring.userData.localMarker = true;
           group.add(ring);
 
+          const body = new THREE.Mesh(
+            new THREE.CapsuleGeometry(.27, .87, 4, 12),
+            new THREE.MeshStandardMaterial({ color: colorFor(player.name), roughness: .72, metalness: .04 }),
+          );
+          body.position.y = .73;
+          body.castShadow = true;
+          body.receiveShadow = true;
+          group.add(body);
+
           const avatar = new THREE.Sprite(new THREE.SpriteMaterial({
             map: avatarTexture(player),
             transparent: true,
             alphaTest: .02,
           }));
-          avatar.position.y = eyeHeight;
-          avatar.scale.set(1.35, 1.35, 1);
+          avatar.position.y = 1.62;
+          avatar.scale.set(.58, .58, 1);
           group.add(avatar);
           group.userData.avatar = avatar;
           group.userData.avatarKey = `${player.avatarURL ?? ''}|${player.photoURL ?? ''}`;
 
           const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(player.name), transparent: true }));
-          label.position.y = .4;
-          label.scale.set(1.85, .35, 1);
+          label.position.y = 2.05;
+          label.scale.set(1.35, .26, 1);
           group.add(label);
           scene.add(group);
           return group;
@@ -614,8 +667,16 @@
 
         const clock = new THREE.Clock();
         renderer.setAnimationLoop(() => {
-          const blend = 1 - Math.exp(-10 * Math.min(clock.getDelta(), .1));
-          for (const group of objects.values()) group.position.lerp(group.userData.target, blend);
+          const delta = Math.min(clock.getDelta(), .1);
+          const blend = 1 - Math.exp(-10 * delta);
+          for (const [id, group] of objects) {
+            if (id === selfID && heldDirections.size && socket?.readyState === WebSocket.OPEN) {
+              const next = applyMove(group.position, activeDirection(), yaw, walkSpeed * delta);
+              group.position.set(next.x, 0, next.z);
+            } else {
+              group.position.lerp(group.userData.target, blend);
+            }
+          }
           const local = objects.get(selfID);
           if (local) camera.position.set(local.position.x, eyeHeight, local.position.z);
           camera.rotation.set(pitch, yaw, 0, 'YXZ');
