@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { makeSession, readSession, sessionCookie, verifyInitData } from './auth.js';
+import { createAvatarLoader } from './avatars.js';
 
 function sameOrigin(request) {
   const origin = request.headers.origin;
@@ -56,6 +57,8 @@ export function createHideoutServer(options = {}) {
   const telegramAPIBase = options.telegramAPIBase ?? 'https://api.telegram.org';
   const fetchImpl = options.fetchImpl ?? fetch;
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
+  const moveNow = options.moveNow ?? (() => performance.now());
+  const avatars = createAvatarLoader({ botToken, telegramAPIBase, fetchImpl, now });
   if (!botToken || groupIDs.some(id => !/^-?\d+$/.test(id))) {
     throw new Error('TELEGRAM_BOT_TOKEN and comma-separated numeric ALLOWED_GROUP_ID are required');
   }
@@ -104,6 +107,27 @@ export function createHideoutServer(options = {}) {
     const path = url.pathname;
     if (request.method === 'GET' && path === '/') {
       response.writeHead(302, { Location: '/hideout' }).end();
+    } else if (request.method === 'GET' && /^\/avatars\/\d+$/.test(path)) {
+      const session = readSession(request.headers.cookie, botToken, now());
+      if (!session || (session.guest && !guestEnabled) || !players.has(String(session.id))) {
+        response.writeHead(401, { 'Cache-Control': 'no-store' }).end('Room session required');
+        return;
+      }
+      const id = path.slice('/avatars/'.length);
+      if (!players.get(id)?.avatarURL) { response.writeHead(404).end('Photo unavailable'); return; }
+      try {
+        const photo = await avatars.get(id);
+        if (!photo) { response.writeHead(404, { 'Cache-Control': 'no-store' }).end('Photo unavailable'); return; }
+        response.writeHead(200, {
+          'Content-Type': photo.type,
+          'Content-Length': photo.bytes.length,
+          'Cache-Control': 'private, max-age=300',
+          'X-Content-Type-Options': 'nosniff',
+        }).end(photo.bytes);
+      } catch {
+        // Do not log fetch errors: Telegram request URLs include the secret token.
+        response.writeHead(502, { 'Cache-Control': 'no-store' }).end('Photo temporarily unavailable');
+      }
     } else if (request.method === 'GET' && (path === '/hideout' || path === '/hideout/')) {
       if (url.searchParams.get('guest') === '1') {
         if (!guestEnabled) { response.writeHead(404).end('Debug guest access is disabled'); return; }
@@ -152,6 +176,7 @@ export function createHideoutServer(options = {}) {
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 8192 });
   const positions = new Map();
   const players = new Map();
+  const movementTimes = new Map();
   const spawnPoints = [
     { x: 0, z: 0 },
     { x: -1.5, z: 0.8 },
@@ -174,6 +199,7 @@ export function createHideoutServer(options = {}) {
     }
     const session = sameOrigin(request) && readSession(request.headers.cookie, botToken, now());
     if (!session) { rejectUpgrade(socket, 401, 'Unauthorized'); return; }
+    if (session.guest && !guestEnabled) { rejectUpgrade(socket, 403, 'Forbidden'); return; }
     if (!session.guest) {
       try {
         if (!await isGroupMember(session.id)) { rejectUpgrade(socket, 403, 'Forbidden'); return; }
@@ -197,6 +223,7 @@ export function createHideoutServer(options = {}) {
     Object.assign(player, {
       name: session.name,
       photoURL: session.photoURL ?? null,
+      avatarURL: session.guest ? null : `/avatars/${playerID}`,
       x: position.x,
       z: position.z,
     });
@@ -220,6 +247,8 @@ export function createHideoutServer(options = {}) {
         peer !== client && peer.readyState === WebSocket.OPEN && peer.playerID === playerID);
       if (!stillConnected) {
         players.delete(playerID);
+        movementTimes.delete(playerID);
+        avatars.remove(playerID);
         broadcast({ type: 'player_left', id: playerID });
       }
     });
@@ -233,14 +262,22 @@ export function createHideoutServer(options = {}) {
         if (!text || text.length > 500) return;
         outgoing = { type: 'chat', id: playerID, name: session.name, text };
       } else if (message?.type === 'move' && ['up', 'down', 'left', 'right'].includes(message.direction)) {
+        const yaw = message.yaw ?? 0;
+        if (typeof yaw !== 'number' || !Number.isFinite(yaw) || Math.abs(yaw) > Math.PI) return;
+        const time = moveNow();
+        if (time - (movementTimes.get(playerID) ?? -Infinity) < 120) return;
+        movementTimes.set(playerID, time);
         const delta = {
           up: [0, -0.1],
           down: [0, 0.1],
           left: [-0.1, 0],
           right: [0.1, 0],
         }[message.direction];
-        position.x = Math.max(-4, Math.min(4, Math.round((position.x + delta[0]) * 10) / 10));
-        position.z = Math.max(-3, Math.min(3, Math.round((position.z + delta[1]) * 10) / 10));
+        // Rotate the fixed local step around Y; clients cannot choose distance/speed.
+        const dx = delta[0] * Math.cos(yaw) + delta[1] * Math.sin(yaw);
+        const dz = -delta[0] * Math.sin(yaw) + delta[1] * Math.cos(yaw);
+        position.x = Math.max(-4, Math.min(4, Math.round((position.x + dx) * 1e6) / 1e6));
+        position.z = Math.max(-3, Math.min(3, Math.round((position.z + dz) * 1e6) / 1e6));
         player.x = position.x;
         player.z = position.z;
         outgoing = {

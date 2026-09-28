@@ -19,16 +19,26 @@ sent while disconnected are not replayed.
 
 The current game shell places a responsive HUD over a small enclosed Three.js
 stage. Each connected player appears as a camera-facing profile-photo billboard,
-with a generated initials icon as fallback. The camera follows the local player;
-movement is interpolated between server positions. Join, move, and leave events
-keep the visible player set synchronized.
+with a generated initials icon as fallback. The perspective camera sits at the
+local player's eye level; your own billboard is hidden. Drag the scene with a
+mouse or finger to look around. Join, move, and leave events keep the visible
+player set synchronized, with movement interpolated between server positions.
+
+Telegram photos load through an authenticated same-origin route. The server
+uses `getUserProfilePhotos` and `getFile`, caches the image briefly, and keeps
+token-bearing Telegram download URLs private. If the bot cannot retrieve a
+photo, the client tries the signed Mini App photo URL, then retains initials.
+Guests also use initials. No additional environment variables are needed.
 
 Holding an arrow button, arrow key, or WASD sends at most one direction every
-`120ms`. The server applies a fixed `0.1` step, clamps positions inside the stage
-boundary, and broadcasts the result to every connected client. The on-screen
-input log distinguishes local input from server-registered movement. There is no
-object collision yet. Players and positions live only in the current server
-process.
+`150ms`, including rapid direction changes. Up/W move forward, Down/S backward,
+and Left/A and Right/D strafe relative to the camera heading. Looking up or down
+does not change walking speed. Typing in chat or leaving the window stops held
+movement. The server enforces a `120ms` minimum between steps per player, applies
+a fixed `0.1` step using the submitted heading, clamps positions inside the stage
+boundary, and broadcasts the result. The input log distinguishes local input
+from server-registered movement. There is no object collision yet. Players and
+positions live only in the current server process.
 
 ## Debug guest access
 
@@ -68,7 +78,7 @@ For the first shared-room test, use these service settings:
   `ALLOWED_GROUP_ID` to the numeric group ID or a comma-separated list, such as
   `-1001234567890,-1009876543210`. Use the same bot configured in BotFather;
   it must be an administrator in every listed group for reliable membership
-  checks. No guest bypass is available.
+  checks. Debug guest access stays disabled unless explicitly configured above.
 - Request-based billing and minimum instances `0` are fine for the prototype.
 - Set maximum instances to `1` while chat state lives only in one process.
 - Increase the request timeout for WebSocket sessions (for example, `3600` seconds).
