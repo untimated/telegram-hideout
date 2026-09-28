@@ -1,7 +1,9 @@
 # Telegram Hideout
 
 Install dependencies with `pnpm install`, set `TELEGRAM_BOT_TOKEN` and numeric
-`ALLOWED_GROUP_ID`, then run `pnpm start` (or `node server.js`). Open the page
+`ALLOWED_GROUP_ID`, then run `pnpm start` (or `node server.js`). The group setting
+accepts one numeric ID or a comma-separated list; members of any listed group
+share the same room. Open the page
 through the BotFather Mini App link. A plain browser URL cannot authenticate.
 
 Run `pnpm test` for the HTTP and two-client relay check.
@@ -30,8 +32,10 @@ For the first shared-room test, use these service settings:
 - Allow public access so Telegram can load the page; `/auth` and `/ws` enforce
   Telegram membership themselves.
 - Configure `TELEGRAM_BOT_TOKEN` as a secret on this service and set
-  `ALLOWED_GROUP_ID` to the numeric group ID. Use the same bot configured in
-  BotFather. No guest bypass is available.
+  `ALLOWED_GROUP_ID` to the numeric group ID or a comma-separated list, such as
+  `-1001234567890,-1009876543210`. Use the same bot configured in BotFather;
+  it must be an administrator in every listed group for reliable membership
+  checks. No guest bypass is available.
 - Request-based billing and minimum instances `0` are fine for the prototype.
 - Set maximum instances to `1` while chat state lives only in one process.
 - Increase the request timeout for WebSocket sessions (for example, `3600` seconds).

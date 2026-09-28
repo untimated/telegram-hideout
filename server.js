@@ -23,15 +23,16 @@ function rejectUpgrade(socket, status, reason) {
 
 export function createHideoutServer(options = {}) {
   const botToken = options.botToken ?? process.env.TELEGRAM_BOT_TOKEN;
-  const groupID = options.groupID ?? process.env.ALLOWED_GROUP_ID;
+  const rawGroupIDs = options.groupID ?? process.env.ALLOWED_GROUP_ID;
+  const groupIDs = String(rawGroupIDs ?? '').split(',').map(id => id.trim());
   const telegramAPIBase = options.telegramAPIBase ?? 'https://api.telegram.org';
   const fetchImpl = options.fetchImpl ?? fetch;
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
-  if (!botToken || !/^-?\d+$/.test(String(groupID || ''))) {
-    throw new Error('TELEGRAM_BOT_TOKEN and numeric ALLOWED_GROUP_ID are required');
+  if (!botToken || groupIDs.some(id => !/^-?\d+$/.test(id))) {
+    throw new Error('TELEGRAM_BOT_TOKEN and comma-separated numeric ALLOWED_GROUP_ID are required');
   }
 
-  async function isGroupMember(userID) {
+  async function checkGroup(userID, groupID) {
     const response = await fetchImpl(`${telegramAPIBase}/bot${botToken}/getChatMember`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -44,6 +45,19 @@ export function createHideoutServer(options = {}) {
     const member = result.result;
     return member?.status === 'creator' || member?.status === 'administrator' || member?.status === 'member' ||
       (member?.status === 'restricted' && member.is_member === true);
+  }
+
+  async function isGroupMember(userID) {
+    let lookupFailure;
+    for (const groupID of new Set(groupIDs)) {
+      try {
+        if (await checkGroup(userID, groupID)) return true;
+      } catch (error) {
+        lookupFailure ??= new Error(`group ${groupID}: ${error.message}`);
+      }
+    }
+    if (lookupFailure) throw lookupFailure;
+    return false;
   }
 
   const page = readFileSync(new URL('./public/hideout.html', import.meta.url));
@@ -111,7 +125,8 @@ export function createHideoutServer(options = {}) {
     const membership = setInterval(async () => {
       try {
         if (!await isGroupMember(session.id)) client.close(1008, 'Group membership required');
-      } catch {
+      } catch (error) {
+        console.error('Membership check:', error.message);
         client.close(1013, 'Membership check unavailable');
       }
     }, 5 * 60 * 1000);

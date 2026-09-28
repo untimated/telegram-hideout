@@ -20,16 +20,19 @@ function signedInitData(id, name = 'Alice') {
 }
 
 test('only signed group members can connect and relay chat under their verified names', { timeout: 10000 }, async t => {
-  const members = new Map([[1, 'member'], [2, 'administrator'], [3, 'left']]);
+  const members = new Map([
+    ['-100123:1', 'member'],
+    ['-100456:2', 'administrator'],
+  ]);
   const calls = [];
   const { server, sockets } = createHideoutServer({
     botToken,
-    groupID: '-100123',
+    groupID: '-100123, -100456',
     now: () => now,
     fetchImpl: async (_url, options) => {
       const request = JSON.parse(options.body);
       calls.push(request);
-      return new Response(JSON.stringify({ ok: true, result: { status: members.get(request.user_id) ?? 'left' } }), {
+      return new Response(JSON.stringify({ ok: true, result: { status: members.get(`${request.chat_id}:${request.user_id}`) ?? 'left' } }), {
         headers: { 'Content-Type': 'application/json' },
       });
     },
@@ -93,9 +96,16 @@ test('only signed group members can connect and relay chat under their verified 
       assert.deepEqual(JSON.parse(data.toString()), { type: 'chat', name, text });
     }
   }
-  members.set(1, 'left');
+  members.set('-100123:1', 'left');
   await refused(connect(aCookie), 403);
-  assert.ok(calls.every(call => call.chat_id === '-100123'));
+  assert.deepEqual(new Set(calls.map(call => call.chat_id)), new Set(['-100123', '-100456']));
+  assert.ok(calls.some(call => call.chat_id === '-100456' && call.user_id === 2));
   a.terminate();
   b.terminate();
+});
+
+test('rejects malformed group ID lists at startup', () => {
+  for (const groupID of ['', '-100123,', '-100123,abc']) {
+    assert.throws(() => createHideoutServer({ botToken, groupID }), /ALLOWED_GROUP_ID/);
+  }
 });
