@@ -20,7 +20,7 @@ export function verifyInitData(raw, botToken, nowSeconds = Math.floor(Date.now()
   if (new Set(fields.map(([key]) => key)).size !== fields.length) return null;
   const hash = params.get('hash');
   const check = fields
-    .filter(([key]) => key !== 'hash' && key !== 'signature')
+    .filter(([key]) => key !== 'hash')
     .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
     .map(([key, value]) => `${key}=${value}`)
     .join('\n');
