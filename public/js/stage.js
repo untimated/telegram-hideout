@@ -92,11 +92,19 @@ export function buildGossipBarStage(THREE, scene, { Robot, floorEnvironment } = 
   place(models.RoomFloor(1.1, 13.4), -7.05, 0, 0);
   place(models.PoolBasin(poolWidth, 13.2), poolX, 0, 0);
   place(models.PoolWaterSurface(poolWidth - .1, 13.1), poolX, 0, 0);
-  for (const x of [poolX - poolWidth / 2 - .09, poolX + poolWidth / 2 + .09]) place(models.PoolCoping(13.2, .18), x, 0, 0, Math.PI / 2);
-  for (const z of [-6.69, 6.69]) place(models.PoolCoping(poolWidth + .4, .18), poolX, 0, z);
-  for (let index = 0; index < 5; index++) {
-    const lamp = place(models.PoolLight(), poolX + poolWidth / 2 - .4, .12, -5 + index * 2.5, Math.PI / 2);
-    if (index % 2) unlit(lamp);
+  const caustics = place(models.PoolCaustics(poolWidth - .1, 13.1), poolX, 0, 0);
+  for (const x of [poolX - poolWidth / 2 - .09, poolX + poolWidth / 2 + .09]) place(models.PoolCoping(13.2, .24), x, 0, 0, Math.PI / 2);
+  for (const z of [-6.69, 6.69]) place(models.PoolCoping(poolWidth + .5, .24), poolX, 0, z);
+  // Underwater lamps staggered along both long walls, plus three real lights so they actually
+  // wash the tiles; the rest of the glow is additive halos.
+  for (let index = 0; index < 6; index++) {
+    place(models.PoolWallLight(), poolX + poolWidth / 2 - .015, -.62, -5.5 + index * 2.2, -Math.PI / 2);
+    place(models.PoolWallLight(), poolX - poolWidth / 2 + .015, -.62, -4.4 + index * 2.2, Math.PI / 2);
+  }
+  for (const z of [-4.4, 0, 4.4]) {
+    const wash = new THREE.PointLight(0x33e6ff, 7, 5.5, 2);
+    wash.position.set(poolX, -.55, z);
+    level.add(wash);
   }
   place(models.RoomWall(13.6, 1.3), outerWallX, 0, 0, Math.PI / 2);
   for (const z of [-6.8, 6.8]) place(models.RoomWall(-half - outerWallX + .18, 1.3), (outerWallX - half) / 2, 0, z);
@@ -222,6 +230,8 @@ export function buildGossipBarStage(THREE, scene, { Robot, floorEnvironment } = 
   ]) place(models.PottedPlant(.62, seed), x, 0, z);
   for (const z of [-3.4, -.6, 2.2]) place(models.WallArtFrame(.8, .58), 6.37, 1.95, z, -Math.PI / 2);
   for (const [z, tone] of [[-2, 'warm'], [.8, 'magenta'], [3.8, 'warm']]) place(models.WallLight(tone), 6.36, 1.5, z, -Math.PI / 2);
+  // Painting on the south wall between the entrance doors and the stage.
+  place(models.WallPainting({ width: 1.8, height: 1.2, image: '/paintings/abstract_cyber_ai_gen.png' }), -.5, 1, half - .12, Math.PI);
   place(models.WallLight('magenta'), -6.2, 1.85, -6.36);
   place(models.WallLight('cyan'), 0, 1.85, -6.36);
 
@@ -233,6 +243,7 @@ export function buildGossipBarStage(THREE, scene, { Robot, floorEnvironment } = 
   level.userData.animate = time => {
     rippleMap.offset.set(time * .003, time * .005);
     models.materials.water.roughnessMap.offset.copy(rippleMap.offset);
+    for (const { map, speed } of caustics.userData.maps) map.offset.set(time * speed[0], time * speed[1]);
   };
 
   // Backdrop beyond the glass: dark ground, lit palms by the pool wall, black silhouette rows and

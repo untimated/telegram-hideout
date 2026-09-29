@@ -104,10 +104,12 @@ export function createHideoutServer(options = {}) {
   }
 
   const page = readFileSync(new URL('./public/hideout.html', import.meta.url));
-  const staticAsset = (file, contentType) => ({
+  const staticAsset = (file, contentType, cacheControl = 'no-cache') => ({
     contentType,
+    cacheControl,
     body: readFileSync(new URL(file, import.meta.url)),
   });
+  const textureAsset = name => staticAsset(`./assets/textures/pool_tiles/Tiles132A_1K-JPG_${name}.jpg`, 'image/jpeg', 'public, max-age=86400');
   const staticAssets = new Map([
     ['/hideout.css', staticAsset('./public/hideout.css', 'text/css; charset=utf-8')],
     ['/js/app.js', staticAsset('./public/js/app.js', 'text/javascript; charset=utf-8')],
@@ -124,6 +126,10 @@ export function createHideoutServer(options = {}) {
     ['/js/models/furniture.js', staticAsset('./public/js/models/furniture.js', 'text/javascript; charset=utf-8')],
     ['/js/models/decor.js', staticAsset('./public/js/models/decor.js', 'text/javascript; charset=utf-8')],
     ['/js/models/roof.js', staticAsset('./public/js/models/roof.js', 'text/javascript; charset=utf-8')],
+    ['/textures/pool_tiles/color.jpg', textureAsset('Color')],
+    ['/textures/pool_tiles/normal.jpg', textureAsset('NormalGL')],
+    ['/textures/pool_tiles/roughness.jpg', textureAsset('Roughness')],
+    ['/paintings/abstract_cyber_ai_gen.png', staticAsset('./assets/paintings/abstract_cyber_ai_gen.png', 'image/png', 'public, max-age=86400')],
     ['/js/sky.js', staticAsset('./public/js/sky.js', 'text/javascript; charset=utf-8')],
     ['/js/models/palms.js', staticAsset('./public/js/models/palms.js', 'text/javascript; charset=utf-8')],
   ]);
@@ -133,10 +139,10 @@ export function createHideoutServer(options = {}) {
     if (request.method === 'GET' && path === '/') {
       response.writeHead(302, { Location: '/hideout' }).end();
     } else if (request.method === 'GET' && staticAssets.has(path)) {
-      const { contentType, body } = staticAssets.get(path);
+      const { contentType, cacheControl, body } = staticAssets.get(path);
       response.writeHead(200, {
         'Content-Type': contentType,
-        'Cache-Control': 'no-cache',
+        'Cache-Control': cacheControl,
         'X-Content-Type-Options': 'nosniff',
       }).end(body);
     } else if (request.method === 'GET' && /^\/avatars\/\d+$/.test(path)) {

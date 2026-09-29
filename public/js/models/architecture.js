@@ -1,4 +1,6 @@
-import { STONE_TILE } from './core.js';
+import { STONE_TILE, POOL_TILE_UNIT, scaleBoxUVs } from './core.js';
+
+export const POOL_FLOOR = -1.05;
 
 export function createArchitectureModels(t) {
   const { THREE, materials: m, group, box, cylinder } = t;
@@ -173,14 +175,71 @@ export function createArchitectureModels(t) {
     return model;
   }
 
+  // A ~1.1 m deep tiled basin. The water surface sits at y = .105; the floor is at POOL_FLOOR.
   function PoolBasin(width = 1.6, depth = 6.4) {
     const model = group('PoolBasin');
     const wall = .18;
-    box(model, m.darkMetal, width, .32, depth, 0, -.16, 0);
-    box(model, m.wallTrim, width + wall * 2, .38, wall, 0, -.02, -depth / 2 - wall / 2);
-    box(model, m.wallTrim, width + wall * 2, .38, wall, 0, -.02, depth / 2 + wall / 2);
-    box(model, m.wallTrim, wall, .38, depth, -width / 2 - wall / 2, -.02, 0);
-    box(model, m.wallTrim, wall, .38, depth, width / 2 + wall / 2, -.02, 0);
+    // Walls stop at deck level; the wider coping sits on top so no faces are coplanar.
+    const wallHeight = -POOL_FLOOR + .1;
+    const wallY = (POOL_FLOOR - .1) / 2;
+    const tiled = mesh => scaleBoxUVs(mesh, POOL_TILE_UNIT);
+    tiled(box(model, m.poolTile, width, .1, depth, 0, POOL_FLOOR - .05, 0));
+    tiled(box(model, m.poolTile, width + wall * 2, wallHeight, wall, 0, wallY, -depth / 2 - wall / 2));
+    tiled(box(model, m.poolTile, width + wall * 2, wallHeight, wall, 0, wallY, depth / 2 + wall / 2));
+    tiled(box(model, m.poolTile, wall, wallHeight, depth, -width / 2 - wall / 2, wallY, 0));
+    tiled(box(model, m.poolTile, wall, wallHeight, depth, width / 2 + wall / 2, wallY, 0));
+    return model;
+  }
+
+  // Additive caustic light in layers: over the floor (two scales), along both side walls, and a
+  // faint net riding on the surface itself. userData.maps lists { map, speed } for the caller to
+  // scroll each frame; opposite drift directions are what make the light shimmer.
+  function PoolCaustics(width = 1.6, depth = 6.4) {
+    const model = group('PoolCaustics');
+    model.userData.maps = [];
+    const surfaceY = .105;
+    const wallHeight = surfaceY - POOL_FLOOR;
+    const wallX = width / 2 + .05 - .012;
+    const layer = ({ size, scale, opacity, position, rotationX = 0, rotationY = 0, speed }) => {
+      const map = t.textures.caustic.clone();
+      map.needsUpdate = true;
+      map.repeat.set(size[0] / scale, size[1] / scale);
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(size[0], size[1]),
+        new THREE.MeshBasicMaterial({
+          map, color: 0x8ff3ff, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false,
+        }),
+      );
+      mesh.rotation.set(rotationX, rotationY, 0, 'YXZ');
+      mesh.position.set(...position);
+      model.add(mesh);
+      model.userData.maps.push({ map, speed });
+    };
+    layer({ size: [width, depth], scale: 3.4, opacity: .55, position: [0, POOL_FLOOR + .01, 0], rotationX: -Math.PI / 2, speed: [.006, .004] });
+    layer({ size: [width, depth], scale: 2.2, opacity: .4, position: [0, POOL_FLOOR + .014, 0], rotationX: -Math.PI / 2, speed: [-.004, .007] });
+    layer({ size: [width, depth], scale: 2.6, opacity: .3, position: [0, surfaceY + .004, 0], rotationX: -Math.PI / 2, speed: [-.005, -.006] });
+    for (const side of [-1, 1]) {
+      layer({
+        size: [depth, wallHeight], scale: 2.8, opacity: .5, position: [side * wallX, POOL_FLOOR + wallHeight / 2, 0],
+        rotationY: -side * Math.PI / 2, speed: [side * .005, .002],
+      });
+    }
+    return model;
+  }
+
+  // A recessed underwater lamp on a pool wall, facing +z locally, with an additive halo.
+  function PoolWallLight() {
+    const model = group('PoolWallLight');
+    box(model, m.darkMetal, .22, .22, .06, 0, 0, 0);
+    const disc = cylinder(model, m.neonCyan, .12, .12, .03, 0, 0, .04, 24);
+    disc.rotation.x = Math.PI / 2;
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: t.textures.glow, color: 0x7ff2ff, transparent: true, opacity: 1,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    halo.scale.set(2.6, 2.6, 1);
+    halo.position.z = .1;
+    model.add(halo);
     return model;
   }
 
@@ -199,16 +258,6 @@ export function createArchitectureModels(t) {
     const model = group('PoolCoping');
     box(model, m.coping, length, .12, width, 0, .04, 0);
     box(model, m.neonCyan, length - .08, .025, .025, 0, .09, 0);
-    return model;
-  }
-
-  function PoolLight() {
-    const model = group('PoolLight');
-    const lamp = cylinder(model, m.neonCyan, .085, .085, .035, 0, .13, 0, 20);
-    lamp.rotation.x = Math.PI / 2;
-    const light = new THREE.PointLight(0x21dfff, 2.2, 2.6, 2);
-    light.position.set(0, .3, 0);
-    model.add(light);
     return model;
   }
 
@@ -240,7 +289,7 @@ export function createArchitectureModels(t) {
   return {
     RoomFloor, FloorInset, RoomWall, WallPillar, EntranceFrame, EntranceDoors, WindowGlassPanel, WindowMullion,
     BarPlatform, BarPlatformSteps, SunkenFloor, SunkenRetainingWall, SunkenSteps,
-    SunkenRim, PoolBasin, PoolWaterSurface, PoolCoping, PoolLight, NeonStrip,
+    SunkenRim, PoolBasin, PoolCaustics, PoolWallLight, PoolWaterSurface, PoolCoping, NeonStrip,
     WallLight, RecessedStepLight,
   };
 }

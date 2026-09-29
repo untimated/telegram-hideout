@@ -260,6 +260,32 @@ export function createDecorModels(t, architecture) {
     return model;
   }
 
+  // A real painting in a slim brass frame with a picture light. Origin is bottom-centre and the
+  // canvas faces +z; the image is a texture, lightly self-lit so it stays readable at night.
+  function WallPainting({ width = 1.8, height = 1.2, image } = {}) {
+    const model = group('WallPainting');
+    const rim = .07;
+    box(model, m.brass, width + rim * 2, height + rim * 2, .06, 0, height / 2, 0);
+    box(model, m.darkMetal, width + .03, height + .03, .05, 0, height / 2, .012);
+    const texture = new THREE.TextureLoader().load(image);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
+    const canvas = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      new THREE.MeshStandardMaterial({
+        map: texture, emissive: 0xffffff, emissiveMap: texture, emissiveIntensity: .35, roughness: .6, metalness: 0,
+      }),
+    );
+    canvas.position.set(0, height / 2, .04);
+    model.add(canvas);
+    // Picture light: a brass arm out from the wall with a warm strip aimed down at the canvas.
+    const top = height + rim;
+    box(model, m.brass, .05, .05, .2, 0, top + .06, .1);
+    box(model, m.brass, width * .45, .045, .05, 0, top + .06, .22);
+    box(model, m.neonWarm, width * .45 - .06, .02, .03, 0, top + .03, .22);
+    return model;
+  }
+
   function ChefHat() {
     const model = group('ChefHat');
     cylinder(model, m.porcelain, .15, .15, .08, 0, .04, 0, 20);
@@ -276,6 +302,6 @@ export function createDecorModels(t, architecture) {
     Shrub, PlantPot, PottedPlant, GossipBarSign, TableLamp, FountainPedestal,
     ChocolateFountain, ChocolateFlow, DrinkDispenser, Cup, CupStack, Jukebox,
     StagePlatform, StageSteps, StageSpeaker, MicrophoneStand, Microphone,
-    WallArtFrame, WallArtPanel, ChefHat,
+    WallArtFrame, WallArtPanel, WallPainting, ChefHat,
   };
 }

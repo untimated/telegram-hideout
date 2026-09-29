@@ -2,6 +2,21 @@
 // floor is glossy in patches instead of uniformly plastic. One tile covers STONE_TILE metres.
 export const STONE_TILE = 3;
 
+// Pool tile photo-texture (ambientCG Tiles132A). One texture repeat covers this many metres.
+export const POOL_TILE_UNIT = 1.2;
+
+// Rescales a box's UVs so every face repeats a texture once per `unit` metres, whatever its size.
+export function scaleBoxUVs(mesh, unit) {
+  const { width, height, depth } = mesh.geometry.parameters;
+  const uv = mesh.geometry.attributes.uv;
+  // BoxGeometry face order: +x, -x, +y, -y, +z, -z, four vertices each.
+  const faces = [[depth, height], [depth, height], [width, depth], [width, depth], [width, height], [width, height]];
+  faces.forEach(([u, v], face) => {
+    for (let index = face * 4; index < face * 4 + 4; index++) uv.setXY(index, uv.getX(index) * u / unit, uv.getY(index) * v / unit);
+  });
+  return mesh;
+}
+
 // Seamless value noise on a size x size grid, `cells` lattice cells across, scaled by `weight`.
 function tileableNoise(size, cells, weight, random) {
   const lattice = Float32Array.from({ length: cells * cells }, random);
@@ -82,6 +97,59 @@ function createRippleNormal(THREE) {
   return { normalMap: prepare(normalCanvas), roughnessMap: prepare(roughCanvas) };
 }
 
+// Tileable caustic pattern: bright ridges where two nearest cell points are almost equidistant.
+// Drawn as greyscale, so an additive material turns black into "no light".
+function createCausticTexture(THREE) {
+  const size = 256;
+  let seed = 53;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const points = Array.from({ length: 22 }, () => [random(), random()]);
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext('2d');
+  const image = context.createImageData(size, size);
+  const wrap = d => Math.min(Math.abs(d), 1 - Math.abs(d));
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let first = Infinity;
+      let second = Infinity;
+      for (const [px, py] of points) {
+        const dx = wrap(x / size - px);
+        const dy = wrap(y / size - py);
+        const distance = Math.hypot(dx, dy);
+        if (distance < first) { second = first; first = distance; } else if (distance < second) second = distance;
+      }
+      const ridge = Math.max(0, 1 - (second - first) * 26);
+      const value = Math.pow(ridge, 3) * 255;
+      image.data.set([value, value, value, 255], (y * size + x) * 4);
+    }
+  }
+  context.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+// Soft round glow for additive halo sprites.
+function createGlowTexture(THREE) {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext('2d');
+  const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(.18, 'rgba(255,255,255,.55)');
+  gradient.addColorStop(.5, 'rgba(255,255,255,.12)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
+
 function createStoneTextures(THREE) {
   const size = 512;
   let seed = 7;
@@ -135,6 +203,17 @@ function createStoneTextures(THREE) {
 export function createProceduralTools(THREE) {
   const stone = createStoneTextures(THREE);
   const ripples = createRippleNormal(THREE);
+  const caustic = createCausticTexture(THREE);
+  const glow = createGlowTexture(THREE);
+  const loader = new THREE.TextureLoader();
+  const poolTexture = (name, colour = false) => {
+    const texture = loader.load(`/textures/pool_tiles/${name}.jpg`);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = 8;
+    if (colour) texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  };
+  const poolColour = poolTexture('color', true);
   const standard = (color, roughness = .62, metalness = .14, extra = {}) =>
     new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra });
 
@@ -150,11 +229,15 @@ export function createProceduralTools(THREE) {
       transparent: true, opacity: .38, side: THREE.DoubleSide, depthWrite: false,
     }),
     water: new THREE.MeshPhysicalMaterial({
-      color: 0x19bed7, emissive: 0x075d78, emissiveIntensity: .35,
-      roughness: 1, metalness: .1, transparent: true, opacity: .8,
-      normalMap: ripples.normalMap, roughnessMap: ripples.roughnessMap, normalScale: new THREE.Vector2(1.1, 1.1), specularIntensity: 1,
+      color: 0x1697b3, emissive: 0x075d78, emissiveIntensity: .1,
+      roughness: 1, metalness: .1, transparent: true, opacity: .5, depthWrite: false,
+      normalMap: ripples.normalMap, roughnessMap: ripples.roughnessMap, normalScale: new THREE.Vector2(1.9, 1.9), specularIntensity: 1,
     }),
     coping: standard(0x77849a, .34, .34),
+    poolTile: standard(0xc4dde3, 1, .04, {
+      map: poolColour, normalMap: poolTexture('normal'), roughnessMap: poolTexture('roughness'),
+      emissive: 0xffffff, emissiveMap: poolColour, emissiveIntensity: .14,
+    }),
     platform: standard(0x252a3f, .48, .38),
     barBase: standard(0x2c1c32, .42, .38),
     counter: standard(0x26263a, .28, .45),
@@ -256,5 +339,5 @@ export function createProceduralTools(THREE) {
     };
   }
 
-  return { THREE, materials, group, box, cylinder, sphere, torus, rod, rng };
+  return { THREE, materials, textures: { caustic, glow }, group, box, cylinder, sphere, torus, rod, rng };
 }
