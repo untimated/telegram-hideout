@@ -372,7 +372,8 @@ button { -webkit-tap-highlight-color: transparent; }
 
 @media (max-width: 620px) {
   .room { left: 16px; }
-  #status { top: calc(var(--safe-top) + 64px); max-width: calc(100% - 32px); }
+  /* Same row as the room title, right-aligned, so it never sits on the menu buttons below. */
+  #status { top: calc(var(--safe-top) + 4px); left: auto; right: 16px; translate: none; max-width: calc(100% - 190px); }
   .utility-controls { left: 16px; }
   .debug-panel { top: 146px; left: 16px; width: 186px; min-width: 0; max-height: 34vh; padding: 11px; }
   #help-menu, #profile-card { top: 146px; right: 16px; width: min(300px, calc(100% - 32px)); max-height: 36vh; }

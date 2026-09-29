@@ -23,9 +23,17 @@ export function createHUD({ guestMode, onMessage, onMessageFocus }) {
   const moveButtons = [...document.querySelectorAll('.move')];
   const bubbles = new Map();
 
+  // The "Connected as …" pill is only a greeting: it fades after a few seconds. Progress and
+  // error messages stay up until the state changes.
+  let statusTimer;
   function setStatus(text, state = '') {
+    clearTimeout(statusTimer);
     status.textContent = text;
     status.className = state;
+    status.style.display = '';
+    if (state === 'connected') {
+      statusTimer = setTimeout(() => { status.style.display = 'none'; }, 10000);
+    }
   }
 
   function addDebug(text, kind = '') {
