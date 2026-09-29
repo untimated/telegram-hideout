@@ -129,8 +129,8 @@ export function createHideoutServer(options = {}) {
     ['/textures/pool_tiles/color.jpg', textureAsset('Color')],
     ['/textures/pool_tiles/normal.jpg', textureAsset('NormalGL')],
     ['/textures/pool_tiles/roughness.jpg', textureAsset('Roughness')],
-    ['/paintings/geom_face_ai_gen.png', staticAsset('./assets/paintings/geom_face_ai_gen.png', 'image/png', 'public, max-age=86400')],
-    ['/paintings/abstract_cyber_ai_gen.png', staticAsset('./assets/paintings/abstract_cyber_ai_gen.png', 'image/png', 'public, max-age=86400')],
+    ['/paintings/geom_face_ai_gen.webp', staticAsset('./assets/paintings/geom_face_ai_gen.webp', 'image/webp', 'public, max-age=86400')],
+    ['/paintings/abstract_cyber_ai_gen.webp', staticAsset('./assets/paintings/abstract_cyber_ai_gen.webp', 'image/webp', 'public, max-age=86400')],
     ['/js/sky.js', staticAsset('./public/js/sky.js', 'text/javascript; charset=utf-8')],
     ['/js/models/palms.js', staticAsset('./public/js/models/palms.js', 'text/javascript; charset=utf-8')],
   ]);

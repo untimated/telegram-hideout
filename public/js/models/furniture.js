@@ -25,7 +25,8 @@ export function createFurnitureModels(t) {
 
   function Sofa(width = 1.75) {
     const model = group('Sofa');
-    box(model, m.darkMetal, width, .2, .76, 0, .13, 0);
+    // Plinth is inset slightly so its faces are not coplanar with the arms above it.
+    box(model, m.darkMetal, width - .03, .2, .74, 0, .13, 0);
     box(model, m.upholstery, width - .18, .24, .58, 0, .3, .015);
     box(model, m.upholstery, width, .58, .18, 0, .57, -.29);
     box(model, m.upholstery, .19, .4, .76, -width / 2 + .095, .4, 0);
