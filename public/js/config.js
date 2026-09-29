@@ -10,3 +10,9 @@ export const MOVEMENT_BOUNDS = Object.freeze({
   halfWidth: 6,
   halfDepth: 6,
 });
+
+// Robots are modelled ~1.9 m tall; shrink them a touch so they sit better in the room.
+export const CHARACTER_SCALE = .9;
+
+// First-person eye height in metres (about level with the robots' faces).
+export const EYE_HEIGHT = 1.3;

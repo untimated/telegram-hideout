@@ -1,3 +1,4 @@
+import { CHARACTER_SCALE } from './config.js';
 export function createRobotCharacterFactory(THREE, scene, { guestMode, getGuestSessionToken, addDebug }) {
   const characterPalette = ['#e97858', '#4f8fd8', '#48a88e', '#a06bd2', '#dfa63f', '#d95f91', '#4ba9b8', '#8ba84c'];
 
@@ -129,6 +130,7 @@ export function createRobotCharacterFactory(THREE, scene, { guestMode, getGuestS
 
   function createRobotCharacter(player, { isNPC = false } = {}) {
     const group = new THREE.Group();
+    group.scale.setScalar(CHARACTER_SCALE);
     group.position.set(player.x, 0, player.z);
     group.rotation.y = Number.isFinite(player.yaw) ? player.yaw : 0;
     group.userData.target = new THREE.Vector3(player.x, 0, player.z);

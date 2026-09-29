@@ -1,6 +1,6 @@
 import { createRobotCharacterFactory } from './characters.js';
 import { buildGossipBarStage } from './stage.js';
-import { DEFAULT_SPAWN } from './config.js';
+import { DEFAULT_SPAWN, CHARACTER_SCALE, EYE_HEIGHT } from './config.js';
 import { createNightSky, createGlossEnvironment } from './sky.js';
 
 export async function createWorld({ host, input, players, getSelfID, getOrientation, onLook, isLocallyMoving, getMovement, applyMove, walkSpeed, bubbles, addDebug, guestMode, getGuestSessionToken, queueOrientation }) {
@@ -9,7 +9,7 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
     const scene = new THREE.Scene();
     scene.background = createNightSky(THREE);
     scene.fog = new THREE.Fog(0x171d33, 11, 24);
-    const eyeHeight = 1.25;
+    const eyeHeight = EYE_HEIGHT;
     const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 130);
     camera.position.set(DEFAULT_SPAWN.x, eyeHeight, DEFAULT_SPAWN.z);
     camera.rotation.order = 'YXZ';
@@ -195,7 +195,7 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       for (const [id, bubble] of bubbles) {
         const group = actors.get(id);
         if (!group) { bubble.element.style.display = 'none'; continue; }
-        bubbleAnchor.set(group.position.x, 2.55, group.position.z);
+        bubbleAnchor.set(group.position.x, 2.55 * CHARACTER_SCALE, group.position.z);
         bubbleView.copy(bubbleAnchor).applyMatrix4(camera.matrixWorldInverse);
         bubbleScreen.copy(bubbleAnchor).project(camera);
         if (bubbleView.z >= -camera.near || bubbleView.z <= -camera.far ||

@@ -232,6 +232,8 @@ export function buildGossipBarStage(THREE, scene, { Robot, floorEnvironment } = 
   for (const [z, tone] of [[-2, 'warm'], [.8, 'magenta'], [3.8, 'warm']]) place(models.WallLight(tone), 6.36, 1.5, z, -Math.PI / 2);
   // Painting on the south wall between the entrance doors and the stage.
   place(models.WallPainting({ width: 1.8, height: 1.2, image: '/paintings/abstract_cyber_ai_gen.png' }), -.5, 1, half - .12, Math.PI);
+  // Second painting centred on the stage's back wall.
+  place(models.WallPainting({ width: 2.1, height: 1.4, image: '/paintings/geom_face_ai_gen.png' }), 4.3, 1.2, half - .12, Math.PI);
   place(models.WallLight('magenta'), -6.2, 1.85, -6.36);
   place(models.WallLight('cyan'), 0, 1.85, -6.36);
 
