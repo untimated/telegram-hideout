@@ -84,6 +84,9 @@ test('only signed group members can connect and relay chat under their verified 
   function connect(cookie) {
     return new WebSocket(`ws://${base}/ws`, { headers: { Origin: origin, ...(cookie ? { Cookie: cookie } : {}) } });
   }
+  function connectGuest(token) {
+    return new WebSocket(`ws://${base}/ws`, ['hideout-guest', `guest.${token}`], { headers: { Origin: origin } });
+  }
   async function refused(socket, expected) {
     const [error] = await once(socket, 'error');
     assert.match(error.message, new RegExp(`Unexpected server response: ${expected}`));
@@ -115,20 +118,59 @@ test('only signed group members can connect and relay chat under their verified 
     headers: { Origin: origin, Authorization: guestAuthorization },
   });
   assert.equal(guestAuth.status, 200);
-  const guestCookie = guestAuth.headers.get('set-cookie').split(';')[0];
-  const guest = connect(guestCookie);
+  assert.equal(guestAuth.headers.get('set-cookie'), null);
+  const firstLogin = await guestAuth.json();
+  assert.equal(firstLogin.name, 'Guest 1');
+  await refused(connectGuest(`${firstLogin.guestToken}x`), 401);
+  await refused(connect(`hideout_session=${firstLogin.guestToken}`), 403);
+  const guest = connectGuest(firstLogin.guestToken);
   assert.deepEqual(JSON.parse((await once(guest, 'message'))[0].toString()), {
     type: 'welcome',
-    selfID: String(Number.MAX_SAFE_INTEGER),
-    players: [{ id: String(Number.MAX_SAFE_INTEGER), name: 'Guest', photoURL: null, avatarURL: null, x: 0, z: 0 }],
+    selfID: String(Number.MAX_SAFE_INTEGER - 1),
+    players: [{ id: String(Number.MAX_SAFE_INTEGER - 1), name: 'Guest 1', photoURL: null, avatarURL: null, x: -4, z: 5.5, yaw: 0, pitch: -.12 }],
   });
+  const secondAuth = await fetch(`${origin}/auth/guest`, {
+    method: 'POST',
+    headers: { Origin: origin, Authorization: guestAuthorization },
+  });
+  const secondLogin = await secondAuth.json();
+  assert.equal(secondLogin.name, 'Guest 2');
+  assert.notEqual(secondLogin.guestToken, firstLogin.guestToken);
+  const joinedSecond = once(guest, 'message');
+  const secondGuest = connectGuest(secondLogin.guestToken);
+  assert.deepEqual(JSON.parse((await once(secondGuest, 'message'))[0].toString()), {
+    type: 'welcome',
+    selfID: String(Number.MAX_SAFE_INTEGER - 2),
+    players: [
+      { id: String(Number.MAX_SAFE_INTEGER - 1), name: 'Guest 1', photoURL: null, avatarURL: null, x: -4, z: 5.5, yaw: 0, pitch: -.12 },
+      { id: String(Number.MAX_SAFE_INTEGER - 2), name: 'Guest 2', photoURL: null, avatarURL: null, x: -5.4, z: 5.5, yaw: 0, pitch: -.12 },
+    ],
+  });
+  assert.deepEqual(JSON.parse((await joinedSecond)[0].toString()), {
+    type: 'player_joined',
+    player: { id: String(Number.MAX_SAFE_INTEGER - 2), name: 'Guest 2', photoURL: null, avatarURL: null, x: -5.4, z: 5.5, yaw: 0, pitch: -.12 },
+  });
+  assert.equal((await fetch(`${origin}/avatars/${Number.MAX_SAFE_INTEGER - 2}`, {
+    headers: { 'X-Debug-Guest-Token': firstLogin.guestToken },
+  })).status, 404);
+  const guestMoves = Promise.all([once(guest, 'message'), once(secondGuest, 'message')]);
   guest.send(JSON.stringify({ type: 'move', direction: 'left' }));
-  assert.deepEqual(JSON.parse((await once(guest, 'message'))[0].toString()), {
-    type: 'move', id: String(Number.MAX_SAFE_INTEGER), name: 'Guest', direction: 'left', x: -0.3, z: 0,
-  });
+  for (const [data] of await guestMoves) {
+    assert.deepEqual(JSON.parse(data.toString()), {
+      type: 'move', id: String(Number.MAX_SAFE_INTEGER - 1), name: 'Guest 1', direction: 'left', label: 'Strafe left', yaw: 0, x: -4.3, z: 5.5,
+    });
+  }
+  const guestChat = Promise.all([once(guest, 'message'), once(secondGuest, 'message')]);
+  secondGuest.send(JSON.stringify({ type: 'chat', text: 'hello from guest 2' }));
+  for (const [data] of await guestChat) {
+    assert.deepEqual(JSON.parse(data.toString()), {
+      type: 'chat', id: String(Number.MAX_SAFE_INTEGER - 2), name: 'Guest 2', text: 'hello from guest 2',
+    });
+  }
   assert.equal(calls.length, callsBeforeGuest);
-  const guestClosed = once(guest, 'close');
+  const guestClosed = Promise.all([once(guest, 'close'), once(secondGuest, 'close')]);
   guest.terminate();
+  secondGuest.terminate();
   await guestClosed;
 
   const a = connect(aCookie);
@@ -139,19 +181,19 @@ test('only signed group members can connect and relay chat under their verified 
   assert.deepEqual(welcomeA, {
     type: 'welcome',
     selfID: '1',
-    players: [{ id: '1', name: '@alice', photoURL: null, avatarURL: '/avatars/1', x: 0, z: 0 }],
+    players: [{ id: '1', name: '@alice', photoURL: null, avatarURL: '/avatars/1', x: -4, z: 5.5, yaw: 0, pitch: -.12 }],
   });
   assert.deepEqual(welcomeB, {
     type: 'welcome',
     selfID: '2',
     players: [
-      { id: '1', name: '@alice', photoURL: null, avatarURL: '/avatars/1', x: 0, z: 0 },
-      { id: '2', name: '@bob', photoURL: null, avatarURL: '/avatars/2', x: -1.5, z: 0.8 },
+      { id: '1', name: '@alice', photoURL: null, avatarURL: '/avatars/1', x: -4, z: 5.5, yaw: 0, pitch: -.12 },
+      { id: '2', name: '@bob', photoURL: null, avatarURL: '/avatars/2', x: -5.4, z: 5.5, yaw: 0, pitch: -.12 },
     ],
   });
   assert.deepEqual(JSON.parse((await bobJoined)[0].toString()), {
     type: 'player_joined',
-    player: { id: '2', name: '@bob', photoURL: null, avatarURL: '/avatars/2', x: -1.5, z: 0.8 },
+    player: { id: '2', name: '@bob', photoURL: null, avatarURL: '/avatars/2', x: -5.4, z: 5.5, yaw: 0, pitch: -.12 },
   });
 
   assert.equal((await fetch(`${origin}/avatars/1`)).status, 401);
@@ -172,12 +214,13 @@ test('only signed group members can connect and relay chat under their verified 
       assert.deepEqual(JSON.parse(data.toString()), { type: 'chat', id: name === '@alice' ? '1' : '2', name, text });
     }
   }
-  for (const [direction, x, z] of [['right', 0.3, 0], ['up', 0.3, -0.3]]) {
+  for (const [direction, x, z] of [['right', -3.7, 5.5], ['up', -3.7, 5.2]]) {
     moveTime += 200;
     const registered = Promise.all([once(a, 'message'), once(b, 'message')]);
     a.send(JSON.stringify({ type: 'move', direction, x: 999, z: 999 }));
     for (const [data] of await registered) {
-      assert.deepEqual(JSON.parse(data.toString()), { type: 'move', id: '1', name: '@alice', direction, x, z });
+      const label = direction === 'right' ? 'Strafe right' : 'Forward';
+      assert.deepEqual(JSON.parse(data.toString()), { type: 'move', id: '1', name: '@alice', direction, label, yaw: 0, x, z });
     }
   }
   // A burst and malformed headings cannot grant extra movement. WebSocket ordering
@@ -190,9 +233,9 @@ test('only signed group members can connect and relay chat under their verified 
   for (const [data] of await barrier) assert.equal(JSON.parse(data).type, 'chat');
 
   for (const [yaw, direction, x, z] of [
-    [-Math.PI / 2, 'up', .6, -.3],
-    [-Math.PI / 2, 'right', .6, 0],
-    [Math.PI / 4, 'up', .387868, -.212132],
+    [-Math.PI / 2, 'up', -3.4, 5.2],
+    [-Math.PI / 2, 'right', -3.4, 5.5],
+    [Math.PI / 4, 'up', -3.612132, 5.287868],
   ]) {
     moveTime += 200;
     const received = Promise.all([once(a, 'message'), once(b, 'message')]);
@@ -204,14 +247,14 @@ test('only signed group members can connect and relay chat under their verified 
     }
   }
   let boundaryMove;
-  for (let step = 0; step < 45; step += 1) {
+  for (let step = 0; step < 60; step += 1) {
     moveTime += 200;
     const registered = once(a, 'message');
     a.send(JSON.stringify({ type: 'move', direction: 'right' }));
     boundaryMove = JSON.parse((await registered)[0].toString());
   }
-  assert.equal(boundaryMove.x, 4);
-  assert.equal(boundaryMove.z, -.212132);
+  assert.equal(boundaryMove.x, 6);
+  assert.equal(boundaryMove.z, -6);
   members.set('-100123:1', 'left');
   await refused(connect(aCookie), 403);
   assert.deepEqual(new Set(calls.map(call => call.chat_id)), new Set(['-100123', '-100456']));

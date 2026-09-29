@@ -3,8 +3,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
-import { makeSession, readSession, sessionCookie, verifyInitData } from './auth.js';
+import { makeSession, readSession, readSessionToken, sessionCookie, verifyInitData } from './auth.js';
 import { createAvatarLoader } from './avatars.js';
+import { DEFAULT_SPAWN, MOVEMENT_BOUNDS } from './public/js/config.js';
 
 function sameOrigin(request) {
   const origin = request.headers.origin;
@@ -59,6 +60,7 @@ export function createHideoutServer(options = {}) {
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
   const moveNow = options.moveNow ?? (() => performance.now());
   const avatars = createAvatarLoader({ botToken, telegramAPIBase, fetchImpl, now });
+  let guestNumber = 0;
   if (!botToken || groupIDs.some(id => !/^-?\d+$/.test(id))) {
     throw new Error('TELEGRAM_BOT_TOKEN and comma-separated numeric ALLOWED_GROUP_ID are required');
   }
@@ -102,13 +104,44 @@ export function createHideoutServer(options = {}) {
   }
 
   const page = readFileSync(new URL('./public/hideout.html', import.meta.url));
+  const staticAsset = (file, contentType) => ({
+    contentType,
+    body: readFileSync(new URL(file, import.meta.url)),
+  });
+  const staticAssets = new Map([
+    ['/hideout.css', staticAsset('./public/hideout.css', 'text/css; charset=utf-8')],
+    ['/js/app.js', staticAsset('./public/js/app.js', 'text/javascript; charset=utf-8')],
+    ['/js/ui.js', staticAsset('./public/js/ui.js', 'text/javascript; charset=utf-8')],
+    ['/js/world.js', staticAsset('./public/js/world.js', 'text/javascript; charset=utf-8')],
+    ['/js/characters.js', staticAsset('./public/js/characters.js', 'text/javascript; charset=utf-8')],
+    ['/js/config.js', staticAsset('./public/js/config.js', 'text/javascript; charset=utf-8')],
+    ['/js/stage.js', staticAsset('./public/js/stage.js', 'text/javascript; charset=utf-8')],
+    ['/js/models/index.js', staticAsset('./public/js/models/index.js', 'text/javascript; charset=utf-8')],
+    ['/js/models/core.js', staticAsset('./public/js/models/core.js', 'text/javascript; charset=utf-8')],
+    ['/js/models/architecture.js', staticAsset('./public/js/models/architecture.js', 'text/javascript; charset=utf-8')],
+    ['/js/models/bar.js', staticAsset('./public/js/models/bar.js', 'text/javascript; charset=utf-8')],
+    ['/js/models/kitchen.js', staticAsset('./public/js/models/kitchen.js', 'text/javascript; charset=utf-8')],
+    ['/js/models/furniture.js', staticAsset('./public/js/models/furniture.js', 'text/javascript; charset=utf-8')],
+    ['/js/models/decor.js', staticAsset('./public/js/models/decor.js', 'text/javascript; charset=utf-8')],
+    ['/js/models/roof.js', staticAsset('./public/js/models/roof.js', 'text/javascript; charset=utf-8')],
+    ['/js/sky.js', staticAsset('./public/js/sky.js', 'text/javascript; charset=utf-8')],
+    ['/js/models/palms.js', staticAsset('./public/js/models/palms.js', 'text/javascript; charset=utf-8')],
+  ]);
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const path = url.pathname;
     if (request.method === 'GET' && path === '/') {
       response.writeHead(302, { Location: '/hideout' }).end();
+    } else if (request.method === 'GET' && staticAssets.has(path)) {
+      const { contentType, body } = staticAssets.get(path);
+      response.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
+      }).end(body);
     } else if (request.method === 'GET' && /^\/avatars\/\d+$/.test(path)) {
-      const session = readSession(request.headers.cookie, botToken, now());
+      const guestSession = guestEnabled && readSessionToken(request.headers['x-debug-guest-token'], botToken, now());
+      const session = guestSession?.guest ? guestSession : readSession(request.headers.cookie, botToken, now());
       if (!session || (session.guest && !guestEnabled) || !players.has(String(session.id))) {
         response.writeHead(401, { 'Cache-Control': 'no-store' }).end('Room session required');
         return;
@@ -138,11 +171,12 @@ export function createHideoutServer(options = {}) {
       if (!guestEnabled) { response.writeHead(404).end('Debug guest access is disabled'); return; }
       if (!sameOrigin(request)) { response.writeHead(403).end('Forbidden'); return; }
       if (!hasGuestAccess(request)) { challengeGuest(response); return; }
+      const number = ++guestNumber;
+      const user = { id: Number.MAX_SAFE_INTEGER - number, name: `Guest ${number}`, guest: true };
       response.writeHead(200, {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store',
-        'Set-Cookie': sessionCookie(makeSession({ id: Number.MAX_SAFE_INTEGER, name: 'Guest', guest: true }, botToken, now())),
-      }).end(JSON.stringify({ name: 'Guest' }));
+      }).end(JSON.stringify({ name: user.name, guestToken: makeSession(user, botToken, now()) }));
     } else if (request.method === 'POST' && path === '/auth') {
       if (!sameOrigin(request) || !request.headers['content-type']?.startsWith('application/json')) {
         response.writeHead(403).end('Forbidden');
@@ -173,16 +207,21 @@ export function createHideoutServer(options = {}) {
       response.writeHead(404).end('Not found');
     }
   });
-  const sockets = new WebSocketServer({ noServer: true, maxPayload: 8192 });
+  const sockets = new WebSocketServer({
+    noServer: true,
+    maxPayload: 8192,
+    handleProtocols: protocols => protocols.has('hideout-guest') ? 'hideout-guest' : false,
+  });
   const positions = new Map();
   const players = new Map();
   const movementTimes = new Map();
+  const orientationTimes = new Map();
   const spawnPoints = [
-    { x: 0, z: 0 },
-    { x: -1.5, z: 0.8 },
-    { x: 1.5, z: 0.8 },
-    { x: -1.5, z: -1 },
-    { x: 1.5, z: -1 },
+    DEFAULT_SPAWN,
+    { x: DEFAULT_SPAWN.x - 1.4, z: DEFAULT_SPAWN.z },
+    { x: DEFAULT_SPAWN.x + 1.4, z: DEFAULT_SPAWN.z },
+    { x: DEFAULT_SPAWN.x - 1.4, z: DEFAULT_SPAWN.z - .9 },
+    { x: DEFAULT_SPAWN.x + 1.4, z: DEFAULT_SPAWN.z - .9 },
   ];
 
   function broadcast(message, except) {
@@ -197,9 +236,16 @@ export function createHideoutServer(options = {}) {
       rejectUpgrade(socket, 404, 'Not Found');
       return;
     }
-    const session = sameOrigin(request) && readSession(request.headers.cookie, botToken, now());
+    if (!sameOrigin(request)) { rejectUpgrade(socket, 401, 'Unauthorized'); return; }
+    const protocols = (request.headers['sec-websocket-protocol'] || '').split(',').map(protocol => protocol.trim()).filter(Boolean);
+    const guestToken = protocols.find(protocol => protocol.startsWith('guest.'))?.slice(6);
+    const session = guestToken
+      ? (guestEnabled && protocols.length === 2 && protocols.includes('hideout-guest') &&
+        readSessionToken(guestToken, botToken, now()))
+      : readSession(request.headers.cookie, botToken, now());
     if (!session) { rejectUpgrade(socket, 401, 'Unauthorized'); return; }
-    if (session.guest && !guestEnabled) { rejectUpgrade(socket, 403, 'Forbidden'); return; }
+    if (session.guest && (!guestEnabled || !guestToken)) { rejectUpgrade(socket, 403, 'Forbidden'); return; }
+    if (guestToken && !session.guest) { rejectUpgrade(socket, 403, 'Forbidden'); return; }
     if (!session.guest) {
       try {
         if (!await isGroupMember(session.id)) { rejectUpgrade(socket, 403, 'Forbidden'); return; }
@@ -218,6 +264,8 @@ export function createHideoutServer(options = {}) {
     client.on('error', error => console.error('WebSocket:', error.message));
     const playerID = String(session.id);
     const position = positions.get(session.id) ?? { ...spawnPoints[players.size % spawnPoints.length] };
+    position.yaw ??= 0;
+    position.pitch ??= -.12;
     positions.set(session.id, position);
     const player = players.get(playerID) ?? { id: playerID };
     Object.assign(player, {
@@ -226,6 +274,8 @@ export function createHideoutServer(options = {}) {
       avatarURL: session.guest ? null : `/avatars/${playerID}`,
       x: position.x,
       z: position.z,
+      yaw: position.yaw,
+      pitch: position.pitch,
     });
     client.playerID = playerID;
     players.set(playerID, player);
@@ -248,6 +298,7 @@ export function createHideoutServer(options = {}) {
       if (!stillConnected) {
         players.delete(playerID);
         movementTimes.delete(playerID);
+        orientationTimes.delete(playerID);
         avatars.remove(playerID);
         broadcast({ type: 'player_left', id: playerID });
       }
@@ -261,30 +312,64 @@ export function createHideoutServer(options = {}) {
         const text = message.text.trim();
         if (!text || text.length > 500) return;
         outgoing = { type: 'chat', id: playerID, name: session.name, text };
-      } else if (message?.type === 'move' && ['up', 'down', 'left', 'right'].includes(message.direction)) {
-        const yaw = message.yaw ?? 0;
+      } else if (message?.type === 'orientation') {
+        const yaw = message.yaw;
         if (typeof yaw !== 'number' || !Number.isFinite(yaw) || Math.abs(yaw) > Math.PI) return;
+        const pitch = message.pitch ?? position.pitch;
+        if (typeof pitch !== 'number' || !Number.isFinite(pitch) || Math.abs(pitch) > 1.25) return;
+        const time = moveNow();
+        if (time - (orientationTimes.get(playerID) ?? -Infinity) < 60) return;
+        orientationTimes.set(playerID, time);
+        position.yaw = player.yaw = yaw;
+        position.pitch = player.pitch = pitch;
+        outgoing = { type: 'orientation', id: playerID, name: session.name, yaw, pitch };
+      } else if (message?.type === 'move') {
+        const yaw = message.yaw ?? position.yaw;
+        if (typeof yaw !== 'number' || !Number.isFinite(yaw) || Math.abs(yaw) > Math.PI) return;
+        let forward;
+        let strafe;
+        if (typeof message.forward === 'number' && typeof message.strafe === 'number') {
+          if (!Number.isFinite(message.forward) || !Number.isFinite(message.strafe) ||
+              Math.abs(message.forward) > 1 || Math.abs(message.strafe) > 1) return;
+          forward = message.forward;
+          strafe = message.strafe;
+        } else if (['up', 'down', 'left', 'right'].includes(message.direction)) {
+          forward = message.direction === 'up' ? 1 : message.direction === 'down' ? -1 : 0;
+          strafe = message.direction === 'right' ? 1 : message.direction === 'left' ? -1 : 0;
+        } else {
+          return;
+        }
+        const magnitude = Math.hypot(forward, strafe);
+        if (!magnitude) return;
+        if (magnitude > 1) {
+          forward /= magnitude;
+          strafe /= magnitude;
+        }
         const time = moveNow();
         if (time - (movementTimes.get(playerID) ?? -Infinity) < 160) return;
         movementTimes.set(playerID, time);
-        const delta = {
-          up: [0, -0.3],
-          down: [0, 0.3],
-          left: [-0.3, 0],
-          right: [0.3, 0],
-        }[message.direction];
+        // A diagonal is normalized to the same fixed step length as a straight move.
+        const delta = [strafe * 0.3, -forward * 0.3];
         // Rotate the fixed local step around Y; clients cannot choose distance/speed.
         const dx = delta[0] * Math.cos(yaw) + delta[1] * Math.sin(yaw);
         const dz = -delta[0] * Math.sin(yaw) + delta[1] * Math.cos(yaw);
-        position.x = Math.max(-4, Math.min(4, Math.round((position.x + dx) * 1e6) / 1e6));
-        position.z = Math.max(-3, Math.min(3, Math.round((position.z + dz) * 1e6) / 1e6));
+        position.x = Math.max(-MOVEMENT_BOUNDS.halfWidth, Math.min(MOVEMENT_BOUNDS.halfWidth, Math.round((position.x + dx) * 1e6) / 1e6));
+        position.z = Math.max(-MOVEMENT_BOUNDS.halfDepth, Math.min(MOVEMENT_BOUNDS.halfDepth, Math.round((position.z + dz) * 1e6) / 1e6));
         player.x = position.x;
         player.z = position.z;
+        position.yaw = player.yaw = yaw;
+        const direction = forward > 0 ? 'up' : forward < 0 ? 'down' : strafe > 0 ? 'right' : 'left';
+        const label = [
+          forward > 0 ? 'Forward' : forward < 0 ? 'Backward' : '',
+          strafe < 0 ? 'Strafe left' : strafe > 0 ? 'Strafe right' : '',
+        ].filter(Boolean).join(' + ');
         outgoing = {
           type: 'move',
           id: playerID,
           name: session.name,
-          direction: message.direction,
+          direction,
+          label,
+          yaw,
           x: position.x,
           z: position.z,
         };

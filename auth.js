@@ -57,7 +57,11 @@ export function makeSession(user, botToken, nowSeconds = Math.floor(Date.now() /
 export function readSession(cookieHeader, botToken, nowSeconds = Math.floor(Date.now() / 1000)) {
   const cookie = (cookieHeader || '').split(';').map(part => part.trim()).find(part => part.startsWith(`${cookieName}=`));
   if (!cookie) return null;
-  const value = cookie.slice(cookieName.length + 1);
+  return readSessionToken(cookie.slice(cookieName.length + 1), botToken, nowSeconds);
+}
+
+export function readSessionToken(value, botToken, nowSeconds = Math.floor(Date.now() / 1000)) {
+  if (typeof value !== 'string') return null;
   const parts = value.split('.');
   if (parts.length !== 2 || !sameHash(mac(sessionKey(botToken), parts[0]), parts[1])) return null;
   try {

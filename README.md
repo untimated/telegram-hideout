@@ -1,7 +1,11 @@
 # Telegram Hideout
 
 Install dependencies with `pnpm install`, set `TELEGRAM_BOT_TOKEN` and numeric
-`ALLOWED_GROUP_ID`, then run `pnpm start` (or `node server.js`). The group setting
+`ALLOWED_GROUP_ID`, then run `pnpm start` (or `node server.js`). For local
+development, copy `.env.example` to `.env`, fill in those values, and run
+`npm run dev` (or `pnpm dev`); the dev command loads `.env` automatically. The
+Cloud Run `start` command uses the service's configured environment variables.
+The group setting
 accepts one numeric ID or a comma-separated list; members of any listed group
 share the same room. Open the page
 through the BotFather Mini App link. A plain browser URL cannot authenticate.
@@ -14,16 +18,36 @@ to be reliable. Only current members receive a one-hour session cookie. The
 WebSocket checks that session and group membership before joining, then checks
 membership every five minutes. Expired login data requires closing and reopening
 the Mini App. Chat uses the verified Telegram username, or first name when no
-username is available. The chat still has no saved history or game; messages
-sent while disconnected are not replayed.
+username is available. The on-screen chat history keeps the latest 50 messages
+for the current page session; the server does not save or replay messages sent
+while disconnected.
 
-The current game shell places a responsive HUD over a small enclosed Three.js
-stage. Each connected player appears as a solid-color capsule with a smaller
+The current game shell places a responsive HUD over a procedural Gossip Bar
+blockout assembled from reusable Three.js model factories. It follows the
+concept layout, authored in metres (1 world unit = 1 m) from `GossipBar - Layout -
+Concept.png`: a 13 × 13 m main floor with a glass wall and 3 m planted pool strip
+to the west, the raised bar in the north-west corner, an open kitchen alcove and
+buffet to the north-east, a fountain and drinks island on a flat tile inset, the
+jukebox against the glass, a lounge and café tables along the east wall, and a
+stage in the south-east corner. The entrance is left of centre in the south wall.
+Props keep their natural size; nothing is scaled to fit. New players arrive by the
+entrance, facing the
+fountain, bar, and kitchen. Each connected player appears as a small articulated robot
+assembled from PBR primitives, with a short procedural walk cycle and a smaller
 camera-facing profile photo above it, or generated initials when no photo is
-available. The perspective camera sits at the local player's eye level; your
-own capsule is hidden. Drag the scene with a
-mouse or finger to look around. Join, move, and leave events keep the visible
+available. Robot colors come from a fixed palette selected by stable player ID.
+The same character builder supports player, guest, and NPC instances. The
+perspective camera sits at the local player's eye level; your own robot is
+hidden in first person. Drag the scene with a mouse or finger to look around;
+camera orientation is relayed to other players so each robot turns and tilts
+its head with its player's view. Join, move, and leave events keep the visible
 player set synchronized, with movement interpolated between server positions.
+Press Enter to focus the message input; sending a message returns keyboard focus
+to the room. Other players' speech bubbles remain HTML elements, projected over
+their speakers every frame so they follow player movement and shrink with
+distance. Your own messages appear only in the chat history. The history starts
+visible and can be toggled beside Send; the input log has a separate show/hide
+control.
 
 Telegram photos load through an authenticated same-origin route. The server
 uses `getUserProfilePhotos` and `getFile`, caches the image briefly, and keeps
@@ -40,10 +64,34 @@ does not change walking speed. Typing in chat or leaving the window stops held
 movement. The server enforces a `160ms` minimum between steps per player, applies
 a fixed `0.3` step using the submitted heading, clamps positions inside the stage
 boundary, and broadcasts the result. While a direction is held, the local camera
-moves smoothly every frame at roughly the same speed; on release it eases toward
-the last server position. The input log distinguishes local input from
-server-registered movement. There is no object collision yet. Players and
-positions live only in the current server process.
+moves smoothly every frame at roughly the same speed; remote players ease between
+server updates. Releasing input stops local movement immediately. The input log
+distinguishes local input from server-registered movement. There is no object
+collision yet. Players and positions live only in the current server process.
+
+## Frontend structure
+
+The browser code is split by responsibility so the room layout and later
+interactions can grow without mixing DOM, networking, and rendering code:
+
+- `public/js/app.js` coordinates authentication, WebSocket messages, and input.
+- `public/js/ui.js` owns the HUD, profile, chat history, help, logs, and speech bubbles.
+- `public/js/world.js` owns the Three.js renderer, camera, actor updates, and projection.
+- `public/js/characters.js` builds the shared player, guest, and NPC robot.
+- `public/js/stage.js` assembles the Gossip Bar blockout from reusable model
+  factories in `public/js/models/`.
+- `public/js/models/` contains shared PBR materials and procedural generators
+  for architecture, bar and kitchen fixtures, furniture, plants, lighting,
+  stage props, and wall decoration. Factories return named Three.js groups so
+  later maps and interactions can reuse the same models.
+- `public/js/config.js` shares the compact room scale and movement bounds
+  between the scene, local movement, and server validation.
+- `public/hideout.html` and `public/hideout.css` contain the page shell and styling.
+
+Picking, selection outlines, and contextual HTML panels for jukeboxes or food and
+drink counters are not implemented yet. The intended boundary is world-side
+interaction targets and selection feedback, with their controls and information
+rendered by the HUD layer.
 
 ## Debug guest access
 
@@ -55,8 +103,10 @@ https://YOUR-CLOUD-RUN-URL/hideout?guest=1
 ```
 
 The browser shows its native Basic Auth prompt. Valid credentials create a
-signed one-hour session named `Guest`, which can use chat and movement without a
-Telegram membership lookup. The ordinary `/hideout` URL still requires Telegram.
+signed one-hour debug session for each tab (`Guest 1`, `Guest 2`, and so on), so
+you can open two tabs in the same browser and see two separate players. Guest
+sessions can use chat and movement without a Telegram membership lookup. The
+ordinary `/hideout` URL still requires Telegram.
 Leave both debug variables unset to remove the guest route; keep the password in
 Secret Manager and use this only over HTTPS.
 
