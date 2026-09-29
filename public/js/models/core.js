@@ -255,7 +255,6 @@ export function createProceduralTools(THREE) {
       transparent: true, opacity: .48, side: THREE.DoubleSide,
     }),
     beverage: standard(0xc76a2b, .26, .08),
-    darkBeverage: standard(0x452634, .25, .08),
     upholstery: standard(0x5f2949, .68, .06),
     cushion: standard(0x853457, .74, .02),
     plantPot: standard(0x473546, .72, .08),

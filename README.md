@@ -78,20 +78,34 @@ interactions can grow without mixing DOM, networking, and rendering code:
 - `public/js/ui.js` owns the HUD, profile, chat history, help, logs, and speech bubbles.
 - `public/js/world.js` owns the Three.js renderer, camera, actor updates, and projection.
 - `public/js/characters.js` builds the shared player, guest, and NPC robot.
-- `public/js/stage.js` assembles the Gossip Bar blockout from reusable model
-  factories in `public/js/models/`.
-- `public/js/models/` contains shared PBR materials and procedural generators
-  for architecture, bar and kitchen fixtures, furniture, plants, lighting,
-  stage props, and wall decoration. Factories return named Three.js groups so
-  later maps and interactions can reuse the same models.
-- `public/js/config.js` shares the compact room scale and movement bounds
-  between the scene, local movement, and server validation.
+- `public/js/stage.js` builds the Gossip Bar by running one module per area from
+  `public/js/stage/` (lighting, shell, pool, bar, kitchen, lounge, stage area, dressing, NPCs,
+  ceiling, backdrop). `stage/context.js` supplies the shared model kit, `place()`, `unlit()`,
+  the interactable registry and the per-frame animators; `stage/layout.js` holds shared
+  dimensions (room, fountain, pool). To add an area, write `stage/<area>.js` exporting
+  `buildX(context)` and add it to the list in `stage.js`.
+- `public/js/models/` contains shared PBR materials (`core.js`, including procedural stone,
+  ripple, caustic and glow textures) and procedural generators for architecture, bar and
+  kitchen fixtures, furniture, decor, roof/ceiling pieces and palms. Factories return named
+  Three.js groups so later maps and interactions can reuse the same models.
+- `public/js/sky.js` draws the static glitter night sky and the floor's reflection environment.
+- `public/js/config.js` shares the room size, movement bounds, spawn, character scale and eye
+  height between the scene, local movement, and server validation.
 - `public/hideout.html` and `public/hideout.css` contain the page shell and styling.
 
-Picking, selection outlines, and contextual HTML panels for jukeboxes or food and
-drink counters are not implemented yet. The intended boundary is world-side
-interaction targets and selection feedback, with their controls and information
-rendered by the HUD layer.
+The server serves every `.js` file under `public/js/` automatically (read once at startup, so
+restart after edits). Textures and paintings under `assets/` are listed explicitly in
+`server.js`. Keep them small: the pool tile maps are about 2.4 MB and the paintings are WebP.
+
+## Interaction plan
+
+The level exposes what a player can use through `level.userData.interactables`, a list of
+`{ id, label, object, approach: { x, z, yaw } }` for the bar, buffet, jukebox, refreshment
+island, stage and the two NPCs (`approach` is where a player stands, facing `yaw`; 0 faces -z).
+Picking, selection outlines, and contextual HTML panels are not built yet. The intended
+boundary is world-side targets (raycast against `interactables[].object`, outline on hover) and
+HUD-side panels (menus, jukebox controls) driven by the interactable id. Purchases, coins and
+jukebox sync need server messages and are not designed yet.
 
 ## Debug guest access
 

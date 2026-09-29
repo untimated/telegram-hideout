@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { makeSession, readSession, readSessionToken, sessionCookie, verifyInitData } from './auth.js';
@@ -110,29 +110,21 @@ export function createHideoutServer(options = {}) {
     body: readFileSync(new URL(file, import.meta.url)),
   });
   const textureAsset = name => staticAsset(`./assets/textures/pool_tiles/Tiles132A_1K-JPG_${name}.jpg`, 'image/jpeg', 'public, max-age=86400');
+  // Everything under public/js is served as-is (read once at startup), so new modules need no
+  // registration. Binary assets outside public/ are listed explicitly and cached for a day.
+  const listFiles = directory => readdirSync(new URL(directory, import.meta.url), { withFileTypes: true })
+    .flatMap(entry => entry.isDirectory() ? listFiles(`${directory}${entry.name}/`) : [`${directory}${entry.name}`]);
   const staticAssets = new Map([
     ['/hideout.css', staticAsset('./public/hideout.css', 'text/css; charset=utf-8')],
-    ['/js/app.js', staticAsset('./public/js/app.js', 'text/javascript; charset=utf-8')],
-    ['/js/ui.js', staticAsset('./public/js/ui.js', 'text/javascript; charset=utf-8')],
-    ['/js/world.js', staticAsset('./public/js/world.js', 'text/javascript; charset=utf-8')],
-    ['/js/characters.js', staticAsset('./public/js/characters.js', 'text/javascript; charset=utf-8')],
-    ['/js/config.js', staticAsset('./public/js/config.js', 'text/javascript; charset=utf-8')],
-    ['/js/stage.js', staticAsset('./public/js/stage.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/index.js', staticAsset('./public/js/models/index.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/core.js', staticAsset('./public/js/models/core.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/architecture.js', staticAsset('./public/js/models/architecture.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/bar.js', staticAsset('./public/js/models/bar.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/kitchen.js', staticAsset('./public/js/models/kitchen.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/furniture.js', staticAsset('./public/js/models/furniture.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/decor.js', staticAsset('./public/js/models/decor.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/roof.js', staticAsset('./public/js/models/roof.js', 'text/javascript; charset=utf-8')],
+    ...listFiles('./public/js/').filter(file => file.endsWith('.js')).map(file => [
+      file.replace('./public', ''), staticAsset(file, 'text/javascript; charset=utf-8'),
+    ]),
     ['/textures/pool_tiles/color.jpg', textureAsset('Color')],
     ['/textures/pool_tiles/normal.jpg', textureAsset('NormalGL')],
     ['/textures/pool_tiles/roughness.jpg', textureAsset('Roughness')],
-    ['/paintings/geom_face_ai_gen.webp', staticAsset('./assets/paintings/geom_face_ai_gen.webp', 'image/webp', 'public, max-age=86400')],
-    ['/paintings/abstract_cyber_ai_gen.webp', staticAsset('./assets/paintings/abstract_cyber_ai_gen.webp', 'image/webp', 'public, max-age=86400')],
-    ['/js/sky.js', staticAsset('./public/js/sky.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/palms.js', staticAsset('./public/js/models/palms.js', 'text/javascript; charset=utf-8')],
+    ...['abstract_cyber_ai_gen', 'geom_face_ai_gen'].map(name => [
+      `/paintings/${name}.webp`, staticAsset(`./assets/paintings/${name}.webp`, 'image/webp', 'public, max-age=86400'),
+    ]),
   ]);
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');

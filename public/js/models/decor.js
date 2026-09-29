@@ -100,15 +100,6 @@ export function createDecorModels(t, architecture) {
     return model;
   }
 
-  function ChocolateFlow(height = .5) {
-    const model = group('ChocolateFlow');
-    cylinder(model, m.chocolate, .1, .24, height, 0, height / 2, 0, 24);
-    for (const y of [height * .25, height * .65]) {
-      torus(model, m.chocolate, .2 - y * .08, .04, 0, y, 0, Math.PI / 2);
-    }
-    return model;
-  }
-
   function ChocolateFountain() {
     const model = group('ChocolateFountain');
     cylinder(model, m.brass, .055, .055, 1.15, 0, .575, 0, 16);
@@ -300,7 +291,7 @@ export function createDecorModels(t, architecture) {
 
   return {
     Shrub, PlantPot, PottedPlant, GossipBarSign, TableLamp, FountainPedestal,
-    ChocolateFountain, ChocolateFlow, DrinkDispenser, Cup, CupStack, Jukebox,
+    ChocolateFountain, DrinkDispenser, Cup, CupStack, Jukebox,
     StagePlatform, StageSteps, StageSpeaker, MicrophoneStand, Microphone,
     WallArtFrame, WallArtPanel, WallPainting, ChefHat,
   };
