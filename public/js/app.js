@@ -1,15 +1,119 @@
 import { createHUD } from './ui.js';
 import { createWorld } from './world.js';
 import { MOVEMENT_BOUNDS } from './config.js';
+import { createGamePanels } from './panels.js';
+import { createAudio } from './audio.js';
+import { hideoutTime } from './game/clock.js';
+import { ITEM_BY_ID, isDrink } from './game/catalog.js';
+import { SEAT_BY_ID } from './game/seats.js';
+import { createWalletStore } from './wallet-store.js';
 
 const guestMode = new URLSearchParams(location.search).get('guest') === '1';
 const ui = createHUD({ guestMode, onMessage: sendChat, onMessageFocus: stopAllMovement });
+
+// Shared clock: the server's time, so NPC shifts and specials match what the server enforces.
+// Debug guests can preview another hour with ?hour=H (view only; the server still uses real time).
+let clockOffset = 0;
+const previewHour = guestMode ? Number(new URLSearchParams(location.search).get('hour') ?? NaN) : NaN;
+const serverNow = () => Date.now() + clockOffset;
+const viewNow = () => {
+  const now = serverNow();
+  if (!Number.isInteger(previewHour) || previewHour < 0 || previewHour > 23) return now;
+  return now + (previewHour - hideoutTime(now).hour) * 3600_000;
+};
+
+// Game state mirrored from the server (see game.js).
+const game = {
+  self: { coins: 100, drunk: 0, fuel: 1, asleep: false },
+  items: new Map(),
+  jukebox: null,
+  sleepers: new Set(),
+  seated: new Map(), // playerID -> seat id
+  icons: {},
+};
+const audio = createAudio({ serverNow, onBlocked: blocked => panels?.setSoundBlocked(blocked) });
+const panels = createGamePanels({
+  hud: document.querySelector('.hud'),
+  game: {
+    state: () => ({ ...game, selfID, players: playerState }),
+    position: () => world?.localPosition() ?? playerState.get(selfID),
+    now: viewNow,
+    send: sendGame,
+    audio,
+  },
+});
+// Backup copy of the wallet (Telegram CloudStorage or localStorage). Nothing is saved until the
+// saved copy has been read back, so a fresh server wallet never overwrites it first.
+const walletStore = createWalletStore();
+let walletLoaded = false;
+
+function sendGame(message) {
+  if (socket?.readyState !== WebSocket.OPEN) return false;
+  socket.send(JSON.stringify(message));
+  return true;
+}
+
+function setSelf(state) {
+  game.self = { coins: state.coins, drunk: state.drunk, fuel: state.fuel, asleep: state.asleep };
+  if (state.asleep) stopAllMovement();
+  if (walletLoaded) walletStore.save(selfID, { coins: state.coins, drunk: state.drunk, fuel: state.fuel, dayKey: state.dayKey });
+  ui.setCash(state.coins);
+  panels.refresh();
+}
+
+// Slurp or bite as the item reaches the mouth: full volume for your own, fading out over 8 m for
+// other players.
+function playConsumeSound(consumerID, served) {
+  const item = ITEM_BY_ID.get(served.item);
+  const me = playerState.get(selfID);
+  const them = playerState.get(consumerID);
+  const loudness = consumerID === selfID ? 1 : me && them ? Math.max(0, 1 - Math.hypot(me.x - them.x, me.z - them.z) / 8) : 0;
+  if (item && loudness > .05) setTimeout(() => audio.sfx(isDrink(item) ? 'slurp' : 'bite', loudness), 450);
+}
+
+function setSeat(id, seatID) {
+  const seat = seatID ? SEAT_BY_ID.get(seatID) : null;
+  if (seat) game.seated.set(id, seatID);
+  else game.seated.delete(id);
+  world?.setSeat(id, seat);
+}
+
+function setSleeper(id, asleep) {
+  if (asleep) game.sleepers.add(id);
+  else game.sleepers.delete(id);
+  world?.setAsleep(id, asleep);
+}
+
+// Applies the welcome snapshot, then offers the server our saved wallet (accepted once after a
+// server restart, ignored otherwise).
+async function applyGameSnapshot(snapshot) {
+  clockOffset = snapshot.serverTime - Date.now();
+  walletLoaded = false;
+  const loading = walletStore.load(selfID);
+  game.items = new Map(snapshot.items.map(item => [item.id, item]));
+  game.jukebox = snapshot.jukebox;
+  game.icons = snapshot.icons ?? {};
+  for (const id of [...game.sleepers]) setSleeper(id, false);
+  for (const id of snapshot.sleepers) setSleeper(id, true);
+  for (const id of [...game.seated.keys()]) setSeat(id, null);
+  for (const [id, seat] of Object.entries(snapshot.seated ?? {})) setSeat(id, seat);
+  world?.items.reset(snapshot.items);
+  audio.setJukebox(snapshot.jukebox);
+  setSelf(snapshot.self);
+  const saved = await loading;
+  walletLoaded = true;
+  // With a saved copy, the server answers the restore with a fresh self message (which is then
+  // saved); without one, save the server's starting wallet now.
+  if (saved) sendGame({ type: 'restore', ...saved });
+  else setSelf({ ...game.self, dayKey: snapshot.self.dayKey });
+}
 const { input, moveButtons } = ui;
 const moveLabel = {
   up: 'Forward',
   down: 'Backward',
   left: 'Strafe left',
   right: 'Strafe right',
+  stop: 'Stop',
 };
 let socket;
 let guestSessionToken;
@@ -99,10 +203,26 @@ async function startThree() {
       guestMode,
       getGuestSessionToken: () => guestSessionToken,
       queueOrientation,
+      now: viewNow,
+      getSelfState: () => game.self,
+      isJukeboxPlaying: () => {
+        const progress = audio.progress();
+        return Boolean(progress && progress.elapsed < progress.song.duration);
+      },
+      onPick: target => (target ? panels.open(target) : panels.closePanel()),
+      onHover: panels.setHover,
+      onStats: ui.setStats,
+      onProgress: ui.setLoading,
     });
+    world?.items.reset([...game.items.values()]);
+    for (const id of game.sleepers) world?.setAsleep(id, true);
+    for (const [id, seat] of game.seated) world?.setSeat(id, SEAT_BY_ID.get(seat));
+    ui.hideLoading();
   } catch {
     ui.addDebug('three.js: renderer unavailable', 'muted');
   }
+  // Without WebGL the chat still works, so never leave the overlay up.
+  if (ui.isLoading()) ui.hideLoading();
 }
 
 function activeMovement() {
@@ -133,16 +253,46 @@ function directionName(forward, strafe) {
 
 function sendMove(movement = activeMovement()) {
   const time = performance.now();
-  if (input.disabled || socket?.readyState !== WebSocket.OPEN || time - lastMoveAt < moveInterval) return;
+  if (game.self.asleep || input.disabled || socket?.readyState !== WebSocket.OPEN || time - lastMoveAt < moveInterval) return;
   if (!movement.forward && !movement.strafe) return;
+  // Walking off a seat stands up right away (the server does the same on this move).
+  if (game.seated.has(selfID)) setSeat(selfID, null);
   lastMoveAt = time;
   const direction = directionName(movement.forward, movement.strafe);
   ui.addDebug(`input: ${direction} (${Math.round(-yaw * 180 / Math.PI)}°)`);
-  socket.send(JSON.stringify({ type: 'move', ...movement, yaw }));
+  socket.send(JSON.stringify({ type: 'move', ...movement, yaw, ...predictedPosition() }));
 }
 
+// Where this client has drawn the player; the server adopts it when plausible (see server.js).
+function predictedPosition() {
+  const position = world?.localPosition();
+  return position ? { x: Math.round(position.x * 1000) / 1000, z: Math.round(position.z * 1000) / 1000 } : {};
+}
+
+// After the keys are released, report the exact resting spot once the rate limit allows.
+let stopSyncTimer;
+function syncStop() {
+  clearTimeout(stopSyncTimer);
+  stopSyncTimer = setTimeout(() => {
+    if (heldDirections.size || socket?.readyState !== WebSocket.OPEN || game.self.asleep) return;
+    const position = predictedPosition();
+    if (position.x === undefined) return;
+    lastMoveAt = performance.now();
+    socket.send(JSON.stringify({ type: 'move', forward: 0, strafe: 0, yaw, ...position }));
+  }, Math.max(0, moveInterval + 20 - (performance.now() - lastMoveAt)));
+}
+
+// While standing still, keep re-reporting until the server's copy has caught up (it moves at most
+// walking speed per message, so a burst of lag can take a few syncs to absorb).
+setInterval(() => {
+  const server = playerState.get(selfID);
+  const drawn = world?.localPosition();
+  if (!server || !drawn || heldDirections.size) return;
+  if (Math.hypot(server.x - drawn.x, server.z - drawn.z) > .05) syncStop();
+}, 700);
+
 function beginMovement(source, direction) {
-  if (input.disabled || socket?.readyState !== WebSocket.OPEN || heldDirections.has(source)) return;
+  if (game.self.asleep || input.disabled || socket?.readyState !== WebSocket.OPEN || heldDirections.has(source)) return;
   heldDirections.set(source, direction);
   sendMove();
   if (!movementTimer) movementTimer = setInterval(() => {
@@ -156,7 +306,7 @@ function setPointerMovement(source, direction) {
     endMovement(source);
     return;
   }
-  if (input.disabled || socket?.readyState !== WebSocket.OPEN) return;
+  if (game.self.asleep || input.disabled || socket?.readyState !== WebSocket.OPEN) return;
   heldDirections.set(source, direction);
   sendMove();
   if (!movementTimer) movementTimer = setInterval(() => {
@@ -169,6 +319,7 @@ function endMovement(source) {
   if (!heldDirections.size) {
     clearInterval(movementTimer);
     movementTimer = undefined;
+    syncStop();
   }
 }
 
@@ -191,10 +342,10 @@ async function connect() {
   ui.setStatus(guestMode ? 'Checking debug guest access…' : 'Checking Telegram access…');
   let response;
   try {
-    response = guestMode ? await fetch('/auth/guest', {
+    response = guestMode ? await fetch(`${location.origin}/auth/guest`, {
       method: 'POST',
       credentials: 'same-origin',
-    }) : await fetch('/auth', {
+    }) : await fetch(`${location.origin}/auth`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -241,6 +392,7 @@ async function connect() {
       ui.setStatus(`Connected as ${self?.name ?? 'player'}`, 'connected');
       setConnected(true);
       if (self) ui.updateProfile(self);
+      if (message.game) applyGameSnapshot(message.game);
       if (guestMode) ui.addDebug('auth: debug guest access', 'muted');
       ui.addDebug(`server: joined at (${self.x.toFixed(2)}, ${self.z.toFixed(2)})`, 'server');
     } else if (message.type === 'player_joined') {
@@ -268,6 +420,37 @@ async function connect() {
       if (player && Number.isFinite(message.yaw) && Number.isFinite(message.pitch)) {
         upsertPlayer({ ...player, yaw: message.yaw, pitch: message.pitch });
       }
+    } else if (message.type === 'self') {
+      setSelf(message);
+    } else if (message.type === 'notice') {
+      panels.toast(message.text, message.tone);
+    } else if (message.type === 'activity') {
+      ui.addSystemLine(message.text);
+    } else if (message.type === 'item_added') {
+      game.items.set(message.item.id, message.item);
+      world?.items.add(message.item);
+      if (message.item.byID === selfID) {
+        audio.sfx('bell');
+        world?.showcase(message.item.id);
+      }
+      panels.refresh();
+    } else if (message.type === 'item_removed') {
+      const served = game.items.get(message.id);
+      if (message.byID && served) world?.consume(message.byID, served.item);
+      game.items.delete(message.id);
+      if (message.byID && message.byID === selfID) world?.consumeOwn(message.id);
+      else world?.items.remove(message.id);
+      if (message.byID && served) playConsumeSound(message.byID, served);
+      panels.refresh();
+    } else if (message.type === 'jukebox') {
+      game.jukebox = message.jukebox;
+      if (message.jukebox?.byID === selfID) audio.sfx('bell');
+      audio.setJukebox(message.jukebox);
+      panels.refresh();
+    } else if (message.type === 'player_state') {
+      if ('asleep' in message) setSleeper(message.id, message.asleep);
+      if ('seat' in message) setSeat(message.id, message.seat);
+      panels.refresh();
     } else if (message.type === 'chat') {
       ui.addDebug(`sendchat(): ${message.name} ${message.text}`, 'chat');
       ui.addChatHistory(message, selfID);
@@ -326,6 +509,7 @@ const keyDirection = {
   ArrowRight: 'right', d: 'right', D: 'right',
 };
 document.addEventListener('keydown', event => {
+  if (ui.isLoading()) return;
   const targetElement = event.target instanceof Element ? event.target : null;
   const textEntry = targetElement?.closest('input, textarea, select, [contenteditable="true"]');
   const control = targetElement?.closest('button, a');
@@ -336,6 +520,10 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (textEntry || event.ctrlKey || event.metaKey || event.altKey) return;
+  if ((event.key === 'e' || event.key === 'E') && !event.repeat) {
+    panels.useHovered();
+    return;
+  }
   const direction = keyDirection[event.key];
   if (!direction) return;
   event.preventDefault();
@@ -349,6 +537,16 @@ window.addEventListener('blur', stopAllMovement);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopAllMovement();
 });
+
+// Your own footsteps while walking (local only, not synced): one step every ~0.42 s, with a
+// little pitch and volume variation so they do not sound like a loop.
+setInterval(() => {
+  if (!heldDirections.size || game.self.asleep || socket?.readyState !== WebSocket.OPEN) return;
+  audio.sfx('footstep', .8 + Math.random() * .2, .9 + Math.random() * .2);
+}, 420);
+
+// Jukebox volume follows the listener's distance from the box.
+setInterval(() => audio.setListener(playerState.get(selfID)), 500);
 
 ui.addDebug('client: booting…', 'muted');
 startThree();

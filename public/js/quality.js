@@ -1,0 +1,40 @@
+// Keeps the frame rate up on slow devices. Fed the measured fps twice a second, it lowers the
+// render resolution a step at a time while the game runs under TARGET fps, down to MIN_RATIO; if
+// that is still not enough it switches off the small lamp point lights (their glowing shades
+// stay). It only ever steps down, so a device settles instead of flickering between sizes.
+const TARGET = 45;
+const MIN_RATIO = .75;
+const STEP = .25;
+const WARMUP_SECONDS = 3;
+const SLOW_SAMPLES = 4;
+
+export function createQualityGovernor({ renderer, scene, addDebug }) {
+  let ratio = Math.min(devicePixelRatio, 2);
+  let slow = 0;
+  let lampsOff = false;
+  let startedAt = null;
+  renderer.setPixelRatio(ratio);
+
+  return {
+    // Call with the fps of the last half second and the clock time in seconds. The first seconds
+    // after the first sample are ignored (textures and late shaders still settling).
+    sample(fps, time) {
+      startedAt ??= time;
+      if (time - startedAt < WARMUP_SECONDS || document.hidden) return;
+      if (fps >= TARGET) { slow = 0; return; }
+      if (++slow < SLOW_SAMPLES) return;
+      slow = 0;
+      if (ratio > MIN_RATIO) {
+        ratio = Math.max(MIN_RATIO, ratio - STEP);
+        renderer.setPixelRatio(ratio);
+        addDebug?.(`render: ${fps.toFixed(0)} fps, resolution x${ratio}`, 'muted');
+      } else if (!lampsOff) {
+        lampsOff = true;
+        scene.traverse(object => {
+          if (object.isPointLight && object.distance > 0 && object.distance <= 3.5) object.visible = false;
+        });
+        addDebug?.('render: small lamp lights off (slow device)', 'muted');
+      }
+    },
+  };
+}

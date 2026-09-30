@@ -139,43 +139,6 @@ export function createArchitectureModels(t) {
     return model;
   }
 
-  function SunkenFloor(width = 2.25, depth = 1.9) {
-    const model = group('SunkenFloor');
-    box(model, m.tile, width, .16, depth, 0, -.28, 0);
-    box(model, m.floor, width - .12, .025, depth - .12, 0, -.185, 0);
-    return model;
-  }
-
-  function SunkenRetainingWall(width = 2.25, height = .38) {
-    const model = group('SunkenRetainingWall');
-    box(model, m.wallTrim, width, height, .16, 0, height / 2 - .08, 0);
-    box(model, m.neonWarm, width - .12, .035, .025, 0, height - .12, -.095);
-    return model;
-  }
-
-  function SunkenSteps(width = .95, count = 3) {
-    const model = group('SunkenSteps');
-    for (let index = 0; index < count; index++) {
-      const height = .12;
-      const depth = .2;
-      const z = index * depth;
-      const centerY = -.06 - index * .08;
-      box(model, m.coping, width, height, depth, 0, centerY, z);
-      const light = RecessedStepLight(width * .48);
-      light.position.set(0, centerY + height / 2 + .015, z - depth * .34);
-      model.add(light);
-    }
-    return model;
-  }
-
-  function SunkenRim(width = 2.35, depth = .12) {
-    const model = group('SunkenRim');
-    box(model, m.copper, width, .055, depth, 0, 0, 0);
-    box(model, m.neonWarm, width - .1, .018, .025, 0, .035, -depth / 2 - .008);
-    return model;
-  }
-
-  // A ~1.1 m deep tiled basin. The water surface sits at y = .105; the floor is at POOL_FLOOR.
   function PoolBasin(width = 1.6, depth = 6.4) {
     const model = group('PoolBasin');
     const wall = .18;
@@ -288,8 +251,7 @@ export function createArchitectureModels(t) {
 
   return {
     RoomFloor, FloorInset, RoomWall, WallPillar, EntranceFrame, EntranceDoors, WindowGlassPanel, WindowMullion,
-    BarPlatform, BarPlatformSteps, SunkenFloor, SunkenRetainingWall, SunkenSteps,
-    SunkenRim, PoolBasin, PoolCaustics, PoolWallLight, PoolWaterSurface, PoolCoping, NeonStrip,
+    BarPlatform, BarPlatformSteps, PoolBasin, PoolCaustics, PoolWallLight, PoolWaterSurface, PoolCoping, NeonStrip,
     WallLight, RecessedStepLight,
   };
 }

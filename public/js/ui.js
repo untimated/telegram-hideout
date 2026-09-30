@@ -1,4 +1,7 @@
+import { APP_VERSION } from './config.js';
+
 export function createHUD({ guestMode, onMessage, onMessageFocus }) {
+  for (const label of document.querySelectorAll('[data-app-version]')) label.textContent = `v${APP_VERSION}`;
   const status = document.getElementById('status');
   const debug = document.getElementById('debug');
   const debugPanel = document.getElementById('debug-panel');
@@ -36,6 +39,28 @@ export function createHUD({ guestMode, onMessage, onMessageFocus }) {
     }
   }
 
+  // Render stats from world.js, shown at the top of the log panel.
+  const perf = document.getElementById('perf');
+  function setStats({ fps, ms, calls, triangles, geometries, textures, programs, pixelRatio }) {
+    if (debugPanel.hidden) return;
+    perf.textContent = `${fps.toFixed(0)} fps · ${ms.toFixed(1)} ms · ${calls} calls · ${(triangles / 1000).toFixed(0)}k tris · ${geometries} geo · ${textures} tex · ${programs} shaders · x${pixelRatio}`;
+    perf.classList.toggle('slow', fps < 40);
+  }
+
+  // Full-screen loading overlay; it swallows pointer input until the world is ready. Keyboard
+  // input checks isLoading() in app.js.
+  const loading = document.getElementById('loading');
+  function setLoading(text, fraction) {
+    document.getElementById('loading-text').textContent = text;
+    document.getElementById('loading-fill').style.width = `${Math.round(fraction * 100)}%`;
+    loading.setAttribute('aria-valuenow', String(Math.round(fraction * 100)));
+  }
+  function hideLoading() {
+    loading.classList.add('done');
+    setTimeout(() => { loading.hidden = true; }, 450);
+  }
+  const isLoading = () => !loading.classList.contains('done');
+
   function addDebug(text, kind = '') {
     const line = document.createElement('div');
     line.className = `debug-line ${kind}`;
@@ -55,6 +80,20 @@ export function createHUD({ guestMode, onMessage, onMessageFocus }) {
     chatHistory.append(entry);
     while (chatHistory.children.length > 50) chatHistory.firstElementChild.remove();
     chatHistory.scrollTop = chatHistory.scrollHeight;
+  }
+
+  // Things happening in the bar (orders, songs, passing out) share the chat log.
+  function addSystemLine(text) {
+    const entry = document.createElement('div');
+    entry.className = 'chat-entry system';
+    entry.textContent = text;
+    chatHistory.append(entry);
+    while (chatHistory.children.length > 50) chatHistory.firstElementChild.remove();
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+  }
+
+  function setCash(coins) {
+    profileCash.textContent = `Cash: ${coins} 🪙`;
   }
 
   function removeBubble(id) {
@@ -84,30 +123,6 @@ export function createHUD({ guestMode, onMessage, onMessageFocus }) {
     for (const button of moveButtons) button.disabled = !connected;
   }
 
-  function localCashFor(userID) {
-    const now = new Date();
-    const dateKey = date => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-    const today = dateKey(now);
-    const yesterdayDate = new Date(now);
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const key = `hideout.cash.${userID}`;
-    try {
-      const stored = JSON.parse(localStorage.getItem(key) || 'null');
-      let balance = Number.isSafeInteger(stored?.balance) && stored.balance >= 0 ? stored.balance : 100;
-      let lastRefillDate = typeof stored?.lastRefillDate === 'string'
-        ? stored.lastRefillDate
-        : (now.getHours() >= 12 ? today : dateKey(yesterdayDate));
-      if (now.getHours() >= 12 && lastRefillDate !== today) {
-        balance = 100;
-        lastRefillDate = today;
-      }
-      localStorage.setItem(key, JSON.stringify({ balance, lastRefillDate }));
-      return balance;
-    } catch {
-      return 100;
-    }
-  }
-
   function setProfilePhoto(image, fallback, url) {
     image.hidden = true;
     fallback.hidden = false;
@@ -129,7 +144,6 @@ export function createHUD({ guestMode, onMessage, onMessageFocus }) {
     profileName.textContent = fullName;
     profileHandle.textContent = guest ? 'Debug profile · local only' :
       (telegramUser?.username ? `@${telegramUser.username}` : 'Telegram member');
-    profileCash.textContent = `Cash: ${localCashFor(player.id)} 🪙`;
     profileAvatarFallback.textContent = initials;
     profileButtonFallback.textContent = initials;
     setProfilePhoto(profileAvatar, profileAvatarFallback, photoURL);
@@ -220,7 +234,13 @@ export function createHUD({ guestMode, onMessage, onMessageFocus }) {
     bubbles,
     setStatus,
     addDebug,
+    setLoading,
+    hideLoading,
+    isLoading,
+    setStats,
     addChatHistory,
+    addSystemLine,
+    setCash,
     removeBubble,
     showBubble,
     setConnected,

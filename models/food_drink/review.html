@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Food and drink model review</title>
+<style>
+body{margin:0;background:#211b30;color:#f7ecd9;font:14px system-ui}header{padding:16px}h1{font-size:20px;margin:0 0 6px}p{margin:0;color:#c9bdcb}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:12px}.card{background:#2b2438;border-radius:10px;overflow:hidden;text-align:center}.view{height:205px}.label{padding:10px}small{display:block;color:#b8abbe}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
+<header><h1>Food and drink — low-poly models</h1><p>Exported GLB files · metres · origin on serving surface</p></header><main class="grid"></main>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
+const manifest=await fetch('./manifest.json').then(r=>r.json());
+const loader=new GLTFLoader();let loaded=0;
+for(const item of manifest.models){
+  const card=document.createElement('section');card.className='card';
+  const host=document.createElement('div');host.className='view';card.append(host);
+  const label=document.createElement('div');label.className='label';label.textContent=item.id;
+  const small=document.createElement('small');small.textContent=`${item.triangles} triangles${item.provisional?' · provisional':''}`;label.append(small);card.append(label);document.querySelector('main').append(card);
+  const scene=new THREE.Scene();const model=(await loader.loadAsync('./'+item.file)).scene;scene.add(model);
+  const bounds=new THREE.Box3().setFromObject(model);const centre=bounds.getCenter(new THREE.Vector3());
+  const size=bounds.getSize(new THREE.Vector3());const extent=Math.max(size.x,size.y,size.z)*.8;
+  const width=host.clientWidth;const aspect=width/205;
+  const camera=new THREE.OrthographicCamera(-extent*aspect,extent*aspect,extent,-extent,.001,10);
+  camera.position.copy(centre).add(new THREE.Vector3(.8,.7,1));camera.lookAt(centre);
+  scene.add(new THREE.HemisphereLight(0xf4eee3,0x35304a,2));
+  const key=new THREE.DirectionalLight(0xffdca8,3);key.position.set(-1,2,2);scene.add(key);
+  const rim=new THREE.DirectionalLight(0x8adee9,1);rim.position.set(1,1,-1);scene.add(rim);
+  const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(width,205);host.append(renderer.domElement);renderer.render(scene,camera);
+  loaded++;document.querySelector('header p').textContent=`${loaded} / ${manifest.models.length} exported GLB files loaded · metres · origin on serving surface`;
+}
+</script>
+</html>
+

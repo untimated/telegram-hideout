@@ -1,11 +1,34 @@
 import { createServer } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { makeSession, readSession, readSessionToken, sessionCookie, verifyInitData } from './auth.js';
 import { createAvatarLoader } from './avatars.js';
-import { DEFAULT_SPAWN, MOVEMENT_BOUNDS } from './public/js/config.js';
+import { MOVEMENT_BOUNDS, SPAWN_AREA } from './public/js/config.js';
+import { AMBIENCE_FILE, ITEM_BY_ID, SONGS } from './public/js/game/catalog.js';
+import { createGame } from './game.js';
+
+// Client walking speed (m/s): a .3 m step every 200 ms. Reported positions are checked against it.
+const WALK_SPEED = 1.5;
+
+// A random spot in the entrance area, at least SPAWN_GAP from everyone already there (the best of
+// a few tries when it is crowded).
+const SPAWN_GAP = .9;
+export function randomSpawn(taken, random = Math.random) {
+  let best;
+  let bestGap = -1;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const spot = {
+      x: Math.round((SPAWN_AREA.x0 + random() * (SPAWN_AREA.x1 - SPAWN_AREA.x0)) * 100) / 100,
+      z: Math.round((SPAWN_AREA.z0 + random() * (SPAWN_AREA.z1 - SPAWN_AREA.z0)) * 100) / 100,
+    };
+    const gap = Math.min(Infinity, ...taken.map(other => Math.hypot(other.x - spot.x, other.z - spot.z)));
+    if (gap >= SPAWN_GAP) return spot;
+    if (gap > bestGap) { best = spot; bestGap = gap; }
+  }
+  return best;
+}
 
 function sameOrigin(request) {
   const origin = request.headers.origin;
@@ -54,11 +77,16 @@ export function createHideoutServer(options = {}) {
   const groupIDs = String(rawGroupIDs ?? '').split(',').map(id => id.trim());
   const debugGuestUsername = options.debugGuestUsername ?? process.env.DEBUG_GUEST_USERNAME;
   const debugGuestPassword = options.debugGuestPassword ?? process.env.DEBUG_GUEST_PASSWORD;
+  // Telegram user IDs allowed to use "/cheat ..." in chat (comma-separated). For anyone else the
+  // text is an ordinary chat message, so the command is invisible.
+  const adminIDs = new Set(String(options.adminIDs ?? process.env.ADMIN_USER_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean));
   const guestEnabled = Boolean(debugGuestUsername) && Boolean(debugGuestPassword);
   const telegramAPIBase = options.telegramAPIBase ?? 'https://api.telegram.org';
   const fetchImpl = options.fetchImpl ?? fetch;
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
   const moveNow = options.moveNow ?? (() => performance.now());
+  const pickSpawn = options.pickSpawn ?? randomSpawn;
+  const gameNow = options.gameNow ?? (() => Date.now());
   const avatars = createAvatarLoader({ botToken, telegramAPIBase, fetchImpl, now });
   let guestNumber = 0;
   if (!botToken || groupIDs.some(id => !/^-?\d+$/.test(id))) {
@@ -110,29 +138,46 @@ export function createHideoutServer(options = {}) {
     body: readFileSync(new URL(file, import.meta.url)),
   });
   const textureAsset = name => staticAsset(`./assets/textures/pool_tiles/Tiles132A_1K-JPG_${name}.jpg`, 'image/jpeg', 'public, max-age=86400');
+  // Everything under public/js is served as-is (read once at startup), so new modules need no
+  // registration. Binary assets outside public/ are listed explicitly and cached for a day.
+  const listFiles = directory => readdirSync(new URL(directory, import.meta.url), { withFileTypes: true })
+    .flatMap(entry => entry.isDirectory() ? listFiles(`${directory}${entry.name}/`) : [`${directory}${entry.name}`]);
+  const iconTypes = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg' };
+  // One picture per catalog item, WebP preferred over PNG/JPG.
+  const iconByID = new Map();
+  try {
+    const files = readdirSync(new URL('./assets/menu-icons/', import.meta.url), { withFileTypes: true }).filter(entry => entry.isFile());
+    for (const extension of ['webp', 'png', 'jpg']) {
+      for (const { name } of files) {
+        const id = name.slice(0, -extension.length - 1);
+        if (name.endsWith(`.${extension}`) && ITEM_BY_ID.has(id) && !iconByID.has(id)) iconByID.set(id, { name, id, type: iconTypes[extension] });
+      }
+    }
+  } catch { /* No menu pictures yet: menus use emoji. */ }
+  const menuIcons = [...iconByID.values()];
+  const menuIconURLs = Object.fromEntries(menuIcons.map(icon => [icon.id, `/menu-icons/${icon.name}`]));
   const staticAssets = new Map([
     ['/hideout.css', staticAsset('./public/hideout.css', 'text/css; charset=utf-8')],
-    ['/js/app.js', staticAsset('./public/js/app.js', 'text/javascript; charset=utf-8')],
-    ['/js/ui.js', staticAsset('./public/js/ui.js', 'text/javascript; charset=utf-8')],
-    ['/js/world.js', staticAsset('./public/js/world.js', 'text/javascript; charset=utf-8')],
-    ['/js/characters.js', staticAsset('./public/js/characters.js', 'text/javascript; charset=utf-8')],
-    ['/js/config.js', staticAsset('./public/js/config.js', 'text/javascript; charset=utf-8')],
-    ['/js/stage.js', staticAsset('./public/js/stage.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/index.js', staticAsset('./public/js/models/index.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/core.js', staticAsset('./public/js/models/core.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/architecture.js', staticAsset('./public/js/models/architecture.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/bar.js', staticAsset('./public/js/models/bar.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/kitchen.js', staticAsset('./public/js/models/kitchen.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/furniture.js', staticAsset('./public/js/models/furniture.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/decor.js', staticAsset('./public/js/models/decor.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/roof.js', staticAsset('./public/js/models/roof.js', 'text/javascript; charset=utf-8')],
+    ...listFiles('./public/js/').filter(file => file.endsWith('.js')).map(file => [
+      file.replace('./public', ''), staticAsset(file, 'text/javascript; charset=utf-8'),
+    ]),
     ['/textures/pool_tiles/color.jpg', textureAsset('Color')],
     ['/textures/pool_tiles/normal.jpg', textureAsset('NormalGL')],
     ['/textures/pool_tiles/roughness.jpg', textureAsset('Roughness')],
-    ['/paintings/geom_face_ai_gen.webp', staticAsset('./assets/paintings/geom_face_ai_gen.webp', 'image/webp', 'public, max-age=86400')],
-    ['/paintings/abstract_cyber_ai_gen.webp', staticAsset('./assets/paintings/abstract_cyber_ai_gen.webp', 'image/webp', 'public, max-age=86400')],
-    ['/js/sky.js', staticAsset('./public/js/sky.js', 'text/javascript; charset=utf-8')],
-    ['/js/models/palms.js', staticAsset('./public/js/models/palms.js', 'text/javascript; charset=utf-8')],
+    ...['abstract_cyber_ai_gen', 'geom_face_ai_gen'].map(name => [
+      `/paintings/${name}.webp`, staticAsset(`./assets/paintings/${name}.webp`, 'image/webp', 'public, max-age=86400'),
+    ]),
+    // Optional menu pictures: assets/menu-icons/<item id>.webp|png (originals/ is ignored).
+    ...menuIcons.map(({ name, type }) => [`/menu-icons/${name}`, staticAsset(`./assets/menu-icons/${name}`, type, 'public, max-age=86400')]),
+    // Jukebox songs and the bar ambience, served with Range support so clients can seek in sync.
+    ...[...SONGS.map(song => [song.id, song.file]), ['ambience', AMBIENCE_FILE]].map(([id, file]) => [
+      `/music/${id}.mp3`, staticAsset(`./assets/music/${file}`, 'audio/mpeg', 'public, max-age=86400'),
+    ]),
+    // Interface sounds: a click when something opens, a bell when a purchase goes through, and a
+    // slurp or bite when someone consumes an item.
+    ...[['click', 'click(96K).mp3'], ['bell', 'soft-bell(96K).mp3'], ['slurp', 'slurp(96K).mp3'], ['bite', 'bite(96K).mp3'], ['footstep', 'footstep(96K).mp3']].map(([id, file]) => [
+      `/sfx/${id}.mp3`, staticAsset(`./assets/sfx/${file}`, 'audio/mpeg', 'public, max-age=86400'),
+    ]),
   ]);
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
@@ -141,11 +186,19 @@ export function createHideoutServer(options = {}) {
       response.writeHead(302, { Location: '/hideout' }).end();
     } else if (request.method === 'GET' && staticAssets.has(path)) {
       const { contentType, cacheControl, body } = staticAssets.get(path);
-      response.writeHead(200, {
-        'Content-Type': contentType,
-        'Cache-Control': cacheControl,
-        'X-Content-Type-Options': 'nosniff',
-      }).end(body);
+      const headers = { 'Content-Type': contentType, 'Cache-Control': cacheControl, 'X-Content-Type-Options': 'nosniff', 'Accept-Ranges': 'bytes' };
+      const range = /^bytes=(d*)-(d*)$/.exec(request.headers.range ?? '');
+      if (range && (range[1] || range[2])) {
+        const start = range[1] ? Number(range[1]) : Math.max(0, body.length - Number(range[2]));
+        const end = range[1] && range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
+        if (start > end || start >= body.length) {
+          response.writeHead(416, { 'Content-Range': `bytes */${body.length}` }).end();
+          return;
+        }
+        response.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${body.length}` }).end(body.subarray(start, end + 1));
+      } else {
+        response.writeHead(200, headers).end(body);
+      }
     } else if (request.method === 'GET' && /^\/avatars\/\d+$/.test(path)) {
       const guestSession = guestEnabled && readSessionToken(request.headers['x-debug-guest-token'], botToken, now());
       const session = guestSession?.guest ? guestSession : readSession(request.headers.cookie, botToken, now());
@@ -223,13 +276,6 @@ export function createHideoutServer(options = {}) {
   const players = new Map();
   const movementTimes = new Map();
   const orientationTimes = new Map();
-  const spawnPoints = [
-    DEFAULT_SPAWN,
-    { x: DEFAULT_SPAWN.x - 1.4, z: DEFAULT_SPAWN.z },
-    { x: DEFAULT_SPAWN.x + 1.4, z: DEFAULT_SPAWN.z },
-    { x: DEFAULT_SPAWN.x - 1.4, z: DEFAULT_SPAWN.z - .9 },
-    { x: DEFAULT_SPAWN.x + 1.4, z: DEFAULT_SPAWN.z - .9 },
-  ];
 
   function broadcast(message, except) {
     const outgoing = JSON.stringify(message);
@@ -237,6 +283,29 @@ export function createHideoutServer(options = {}) {
       if (peer !== except && peer.readyState === WebSocket.OPEN) peer.send(outgoing);
     }
   }
+
+  function sendTo(playerID, message) {
+    const outgoing = JSON.stringify(message);
+    for (const peer of sockets.clients) {
+      if (peer.playerID === playerID && peer.readyState === WebSocket.OPEN) peer.send(outgoing);
+    }
+  }
+
+  const game = createGame({
+    now: gameNow,
+    send: sendTo,
+    broadcast,
+    getPosition: id => players.get(id),
+    setPosition(id, x, z) {
+      const player = players.get(id);
+      const position = [...positions.entries()].find(([key]) => String(key) === id)?.[1];
+      for (const target of [player, position]) if (target) Object.assign(target, { x, z });
+    },
+    getName: id => players.get(id)?.name ?? 'Someone',
+  });
+  const gameTimer = setInterval(game.tick, 5000);
+  gameTimer.unref();
+  server.on('close', () => clearInterval(gameTimer));
 
   server.on('upgrade', async (request, socket, head) => {
     if (new URL(request.url, 'http://localhost').pathname !== '/ws') {
@@ -270,7 +339,7 @@ export function createHideoutServer(options = {}) {
   sockets.on('connection', (client, session) => {
     client.on('error', error => console.error('WebSocket:', error.message));
     const playerID = String(session.id);
-    const position = positions.get(session.id) ?? { ...spawnPoints[players.size % spawnPoints.length] };
+    const position = positions.get(session.id) ?? pickSpawn([...players.values()]);
     position.yaw ??= 0;
     position.pitch ??= -.12;
     positions.set(session.id, position);
@@ -286,7 +355,7 @@ export function createHideoutServer(options = {}) {
     });
     client.playerID = playerID;
     players.set(playerID, player);
-    client.send(JSON.stringify({ type: 'welcome', selfID: playerID, players: [...players.values()] }));
+    client.send(JSON.stringify({ type: 'welcome', selfID: playerID, players: [...players.values()], game: { ...game.join(playerID), icons: menuIconURLs } }));
     broadcast({ type: 'player_joined', player }, client);
     const expiration = setTimeout(() => client.close(1008, 'Session expired'), Math.max(0, (session.exp - now()) * 1000));
     const membership = session.guest ? null : setInterval(async () => {
@@ -304,6 +373,7 @@ export function createHideoutServer(options = {}) {
         peer !== client && peer.readyState === WebSocket.OPEN && peer.playerID === playerID);
       if (!stillConnected) {
         players.delete(playerID);
+        game.leave(playerID);
         movementTimes.delete(playerID);
         orientationTimes.delete(playerID);
         avatars.remove(playerID);
@@ -314,10 +384,15 @@ export function createHideoutServer(options = {}) {
       if (isBinary) return;
       let message;
       try { message = JSON.parse(data.toString()); } catch { return; }
+      if (game.handle(playerID, message)) return;
       let outgoing;
       if (message?.type === 'chat' && typeof message.text === 'string') {
         const text = message.text.trim();
         if (!text || text.length > 500) return;
+        if (!session.guest && adminIDs.has(playerID) && /^\/cheat\s/i.test(text)) {
+          game.cheat(playerID, text.slice(7));
+          return;
+        }
         outgoing = { type: 'chat', id: playerID, name: session.name, text };
       } else if (message?.type === 'orientation') {
         const yaw = message.yaw;
@@ -331,6 +406,7 @@ export function createHideoutServer(options = {}) {
         position.pitch = player.pitch = pitch;
         outgoing = { type: 'orientation', id: playerID, name: session.name, yaw, pitch };
       } else if (message?.type === 'move') {
+        if (!game.canMove(playerID)) return;
         const yaw = message.yaw ?? position.yaw;
         if (typeof yaw !== 'number' || !Number.isFinite(yaw) || Math.abs(yaw) > Math.PI) return;
         let forward;
@@ -347,14 +423,19 @@ export function createHideoutServer(options = {}) {
           return;
         }
         const magnitude = Math.hypot(forward, strafe);
-        if (!magnitude) return;
+        // Clients may report where they predict they are; a stop message (no direction) only syncs.
+        const reported = Number.isFinite(message.x) && Number.isFinite(message.z) ? { x: message.x, z: message.z } : null;
+        if (!magnitude && !reported) return;
+        if (magnitude) game.stand(playerID);
         if (magnitude > 1) {
           forward /= magnitude;
           strafe /= magnitude;
         }
         const time = moveNow();
-        if (time - (movementTimes.get(playerID) ?? -Infinity) < 160) return;
+        const elapsed = time - (movementTimes.get(playerID) ?? -Infinity);
+        if (elapsed < 160) return;
         movementTimes.set(playerID, time);
+        const previous = { x: position.x, z: position.z };
         // A diagonal is normalized to the same fixed step length as a straight move.
         const delta = [strafe * 0.3, -forward * 0.3];
         // Rotate the fixed local step around Y; clients cannot choose distance/speed.
@@ -362,10 +443,25 @@ export function createHideoutServer(options = {}) {
         const dz = -delta[0] * Math.sin(yaw) + delta[1] * Math.cos(yaw);
         position.x = Math.max(-MOVEMENT_BOUNDS.halfWidth, Math.min(MOVEMENT_BOUNDS.halfWidth, Math.round((position.x + dx) * 1e6) / 1e6));
         position.z = Math.max(-MOVEMENT_BOUNDS.halfDepth, Math.min(MOVEMENT_BOUNDS.halfDepth, Math.round((position.z + dz) * 1e6) / 1e6));
+        // Trust the client's own position when it is reachable at walking speed since the last
+        // accepted move, so the server and the player's view never drift apart. Anything
+        // further (teleports, speed hacks) falls back to the fixed step above.
+        if (reported) {
+          // Never contradict the client (that is what makes players rubber-band): move to the
+          // reported spot, or as far toward it as walking speed allows, so a lagging or bursty
+          // client is caught up with over the next messages instead of being sent elsewhere.
+          const allowed = WALK_SPEED * 1.2 * Math.min(elapsed, 400) / 1000 + .05;
+          const distance = Math.hypot(reported.x - previous.x, reported.z - previous.z);
+          const reach = distance > allowed ? allowed / distance : 1;
+          const x = previous.x + (reported.x - previous.x) * reach;
+          const z = previous.z + (reported.z - previous.z) * reach;
+          position.x = Math.max(-MOVEMENT_BOUNDS.halfWidth, Math.min(MOVEMENT_BOUNDS.halfWidth, Math.round(x * 1e6) / 1e6));
+          position.z = Math.max(-MOVEMENT_BOUNDS.halfDepth, Math.min(MOVEMENT_BOUNDS.halfDepth, Math.round(z * 1e6) / 1e6));
+        }
         player.x = position.x;
         player.z = position.z;
         position.yaw = player.yaw = yaw;
-        const direction = forward > 0 ? 'up' : forward < 0 ? 'down' : strafe > 0 ? 'right' : 'left';
+        const direction = forward > 0 ? 'up' : forward < 0 ? 'down' : strafe > 0 ? 'right' : strafe < 0 ? 'left' : 'stop';
         const label = [
           forward > 0 ? 'Forward' : forward < 0 ? 'Backward' : '',
           strafe < 0 ? 'Strafe left' : strafe > 0 ? 'Strafe right' : '',

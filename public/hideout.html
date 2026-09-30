@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>GossipBoy Hideout</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- three.js addons import the bare "three" specifier; map it to the same build world.js loads. -->
+  <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js" } }</script>
   <link rel="stylesheet" href="/hideout.css">
 </head>
 <body>
@@ -26,17 +28,20 @@
         </button>
       </div>
       <section id="debug-panel" class="debug-panel" aria-label="Server input log" hidden>
-        <div class="debug-title"><span>input log</span><span>server</span></div>
+        <div class="debug-title"><span>input log</span><span class="app-version" data-app-version></span></div>
+        <div id="perf" class="perf-line">render: measuring…</div>
         <div id="debug" role="log" aria-live="polite"></div>
       </section>
 
       <aside id="help-menu" aria-labelledby="help-title" hidden>
-        <h2 id="help-title" class="help-title">Movement and chat</h2>
+        <h2 id="help-title" class="help-title">How to hang out</h2>
         <ul class="help-list">
           <li>Drag the scene with a mouse or finger to look around.</li>
           <li>Use WASD, arrow keys, or the on-screen arrows to move.</li>
           <li>Hold and scrub across the on-screen arrows to change direction.</li>
           <li>Press Enter to focus the chat box; press Enter again to send.</li>
+          <li>Tap things (or aim and press E) to use them: the bar, buffet, refreshments, jukebox, served food, other players.</li>
+          <li>Drinks make you drunk, food refuels you. Pass out and you are stuck until the hour, or until a friend splashes you awake.</li>
         </ul>
       </aside>
       <aside id="profile-card" role="dialog" aria-labelledby="profile-ribbon" hidden>
@@ -55,7 +60,7 @@
               <h2 id="profile-name">Hideout member</h2>
               <p id="profile-handle">Telegram profile</p>
               <p id="profile-cash">Cash: 100 🪙</p>
-              <p id="profile-cash-note">Refills daily after 12:00 PM</p>
+              <p id="profile-cash-note">+100 every day at 1 AM · tap a player to send coins</p>
             </div>
           </div>
         </div>
@@ -76,6 +81,15 @@
         <button id="history-toggle" type="button" aria-label="Hide chat history" aria-controls="chat-history" aria-pressed="true" title="Hide chat history">◷</button>
         <button id="send" aria-label="Send message" disabled>➜</button>
       </form>
+    </div>
+    <div id="loading" role="progressbar" aria-label="Loading Hideout" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="loading-card">
+        <div class="loading-title">Gossip Bar</div>
+        <div class="loading-spinner" aria-hidden="true"></div>
+        <div id="loading-text">Opening the doors…</div>
+        <div class="loading-bar"><span id="loading-fill"></span></div>
+        <div class="app-version" data-app-version></div>
+      </div>
     </div>
   </main>
 
