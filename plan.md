@@ -40,7 +40,7 @@ No path finding needed, just let them appear on their designated place...
 or ocasionally give them static round patrol movement
 
 - Plain Joe 
-  Time     : 11AM-3PM & 5PM to 11PM
+  Time     : 11AM-3PM & 5PM to 7PM
   Position : at Table 2
   Activity : Lunch (just sitting for now) & Dinner
 - Nicholas came at 
@@ -52,7 +52,7 @@ or ocasionally give them static round patrol movement
   Position : By the window
   Activity : staring at the pool 
 - Samantha, Stanley the organist and Harvey the percussionist 
-  Time     : 9AM-1PM
+  Time     : 5PM-11PM
   Position : Stage
   Activity : staring at the pool 
 - Wolfred the bartender

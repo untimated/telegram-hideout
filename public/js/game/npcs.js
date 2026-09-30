@@ -16,7 +16,7 @@ export const NPCS = Object.freeze([
     lines: ['Oui? The buffet is hot.', 'Try the smash burger.', 'Nobody leaves my kitchen hungry.'],
   },
   {
-    id: 'joe', name: 'Plain Joe', role: 'Regular', shifts: [[11, 15], [17, 23]],
+    id: 'joe', name: 'Plain Joe', role: 'Regular', shifts: [[11, 15], [17, 19]],
     x: 2.78, z: -3.15, yaw: -Math.PI / 2, activity: 'sit',
     lines: ['Just having lunch.', 'Dinner time already?', 'Same table, every day.', 'The fried rice is good today.'],
   },
@@ -31,17 +31,17 @@ export const NPCS = Object.freeze([
     lines: ['The pool is so calm today.', 'Look at the palms...', '...'],
   },
   {
-    id: 'samantha', name: 'Samantha', role: 'Singer', from: 9, to: 13,
+    id: 'samantha', name: 'Samantha', role: 'Singer', from: 17, to: 23,
     x: 4.5, z: 4.8, y: .4, yaw: 0, activity: 'sing',
     lines: ['Thank you, thank you!', 'This one is for the regulars.', 'Any requests?'],
   },
   {
-    id: 'stanley', name: 'Stanley', role: 'Organist', from: 9, to: 13,
+    id: 'stanley', name: 'Stanley', role: 'Organist', from: 17, to: 23,
     x: 2.95, z: 4.95, y: .4, yaw: .35, activity: 'play',
     lines: ['Keys warmed up.', 'C major, as always.'],
   },
   {
-    id: 'harvey', name: 'Harvey', role: 'Percussionist', from: 9, to: 13,
+    id: 'harvey', name: 'Harvey', role: 'Percussionist', from: 17, to: 23,
     x: 5.6, z: 4.95, y: .4, yaw: -.35, activity: 'drum',
     lines: ['Ba-dum tss.', 'Keeping time.'],
   },
