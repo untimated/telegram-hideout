@@ -107,7 +107,7 @@ async function applyGameSnapshot(snapshot) {
   if (saved) sendGame({ type: 'restore', ...saved });
   else setSelf({ ...game.self, dayKey: snapshot.self.dayKey });
 }
-const { input, moveButtons } = ui;
+const { input, joystick } = ui;
 const moveLabel = {
   up: 'Forward',
   down: 'Backward',
@@ -229,7 +229,10 @@ function activeMovement() {
   let forward = 0;
   let strafe = 0;
   for (const direction of heldDirections.values()) {
-    if (direction === 'up') forward += 1;
+    if (typeof direction === 'object') {
+      forward += direction.forward;
+      strafe += direction.strafe;
+    } else if (direction === 'up') forward += 1;
     else if (direction === 'down') forward -= 1;
     else if (direction === 'right') strafe += 1;
     else if (direction === 'left') strafe -= 1;
@@ -324,7 +327,7 @@ function endMovement(source) {
 }
 
 function stopAllMovement() {
-  activeMovePointers.clear();
+  releaseJoystick();
   heldDirections.clear();
   clearInterval(movementTimer);
   movementTimer = undefined;
@@ -470,38 +473,58 @@ async function connect() {
   socket.onerror = () => socket.close();
 }
 
-const activeMovePointers = new Set();
-for (const button of moveButtons) {
-  button.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || button.disabled) return;
-    event.preventDefault();
-    activeMovePointers.add(event.pointerId);
-    button.setPointerCapture(event.pointerId);
-    beginMovement(`pointer:${event.pointerId}`, button.dataset.direction);
-  });
-  for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-    button.addEventListener(eventName, event => {
-      activeMovePointers.delete(event.pointerId);
-      endMovement(`pointer:${event.pointerId}`);
-    });
+// Thumb joystick: drag anywhere in any direction. Past the dead zone you walk that way, slowly
+// near the centre and at full speed from ~70% of the throw outward.
+const JOYSTICK_DEAD_ZONE = .18;
+const JOYSTICK_FULL_SPEED = .7;
+let joystickPointer = null;
+
+function steerJoystick(event) {
+  const rect = joystick.getBoundingClientRect();
+  const radius = rect.width / 2;
+  let x = (event.clientX - rect.left - radius) / radius;
+  let y = (event.clientY - rect.top - radius) / radius;
+  const reach = Math.hypot(x, y);
+  if (reach > 1) {
+    x /= reach;
+    y /= reach;
   }
-  button.addEventListener('click', event => {
-    if (event.detail === 0) {
-      const direction = button.dataset.direction;
-      const movement = {
-        forward: direction === 'up' ? 1 : direction === 'down' ? -1 : 0,
-        strafe: direction === 'right' ? 1 : direction === 'left' ? -1 : 0,
-      };
-      sendMove(movement);
-    }
+  joystick.style.setProperty('--x', x.toFixed(3));
+  joystick.style.setProperty('--y', y.toFixed(3));
+  if (reach < JOYSTICK_DEAD_ZONE) {
+    setPointerMovement('joystick', null);
+    return;
+  }
+  const speed = Math.max(.35, Math.min(1, (reach - JOYSTICK_DEAD_ZONE) / (JOYSTICK_FULL_SPEED - JOYSTICK_DEAD_ZONE)));
+  const length = Math.min(reach, 1);
+  setPointerMovement('joystick', { forward: -y / length * speed, strafe: x / length * speed });
+}
+
+function releaseJoystick() {
+  if (joystickPointer === null) return;
+  joystickPointer = null;
+  joystick.classList.remove('active');
+  joystick.style.setProperty('--x', 0);
+  joystick.style.setProperty('--y', 0);
+  endMovement('joystick');
+}
+
+joystick.addEventListener('pointerdown', event => {
+  if (event.button !== 0 || joystickPointer !== null || joystick.classList.contains('disabled')) return;
+  event.preventDefault();
+  joystickPointer = event.pointerId;
+  joystick.setPointerCapture(event.pointerId);
+  joystick.classList.add('active');
+  steerJoystick(event);
+});
+joystick.addEventListener('pointermove', event => {
+  if (event.pointerId === joystickPointer) steerJoystick(event);
+});
+for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  joystick.addEventListener(eventName, event => {
+    if (event.pointerId === joystickPointer) releaseJoystick();
   });
 }
-document.addEventListener('pointermove', event => {
-  if (!activeMovePointers.has(event.pointerId)) return;
-  const button = document.elementFromPoint(event.clientX, event.clientY)?.closest('.move');
-  const direction = button && !button.disabled ? button.dataset.direction : null;
-  setPointerMovement(`pointer:${event.pointerId}`, direction);
-});
 const keyDirection = {
   ArrowUp: 'up', w: 'up', W: 'up',
   ArrowDown: 'down', s: 'down', S: 'down',

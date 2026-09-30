@@ -263,36 +263,48 @@ button { -webkit-tap-highlight-color: transparent; }
   transform: rotate(45deg);
 }
 
-.movement {
+/* Thumb joystick (app.js): the knob follows the drag via --x/--y (-1..1). */
+#joystick {
+  --size: 132px;
+  --x: 0;
+  --y: 0;
   position: absolute;
   left: 24px;
   bottom: calc(var(--safe-bottom) + 76px);
-  display: grid;
-  grid-template-columns: repeat(3, 58px);
-  grid-template-rows: repeat(2, 58px);
-  gap: 6px;
-}
-.move {
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(255, 202, 113, .2);
-  border-radius: 14px;
-  background: rgba(20, 15, 34, .62);
-  color: white;
+  width: var(--size);
+  height: var(--size);
+  border: 1px solid rgba(255, 202, 113, .22);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, transparent 58%, rgba(255, 202, 113, .08) 59%, transparent 62%),
+    rgba(20, 15, 34, .5);
   box-shadow: 0 8px 24px rgba(0, 0, 0, .24);
   backdrop-filter: blur(10px);
-  font-size: 24px;
-  font-weight: 900;
   cursor: pointer;
   user-select: none;
+  -webkit-user-select: none;
   touch-action: none;
+  pointer-events: auto;
 }
-.move:active { transform: translateY(2px) scale(.96); border-color: rgba(255, 202, 113, .6); background: rgba(255, 202, 113, .72); }
-.move:disabled { opacity: .36; cursor: default; }
-.move[data-direction="up"] { grid-column: 2; grid-row: 1; }
-.move[data-direction="left"] { grid-column: 1; grid-row: 2; }
-.move[data-direction="down"] { grid-column: 2; grid-row: 2; }
-.move[data-direction="right"] { grid-column: 3; grid-row: 2; }
+/* A bigger invisible grab area so a thumb that lands just outside still catches. */
+#joystick::before { content: ''; position: absolute; inset: -22px; border-radius: 50%; }
+.joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44%;
+  height: 44%;
+  border: 1px solid rgba(255, 202, 113, .45);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(255, 226, 170, .55), rgba(255, 202, 113, .22) 70%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+  translate: calc(-50% + var(--x) * var(--size) * .3) calc(-50% + var(--y) * var(--size) * .3);
+  transition: translate .12s ease-out;
+  pointer-events: none;
+}
+#joystick.active { border-color: rgba(255, 202, 113, .5); }
+#joystick.active .joystick-knob { transition: none; background: radial-gradient(circle at 35% 30%, rgba(255, 236, 196, .9), rgba(255, 202, 113, .6) 70%); }
+#joystick.disabled { opacity: .36; cursor: default; }
 
 #chat-form {
   position: absolute;
@@ -384,7 +396,7 @@ button { -webkit-tap-highlight-color: transparent; }
   .profile-avatar-wrap { flex-basis: 70px; width: 70px; height: 70px; }
   #profile-avatar, #profile-avatar-fallback { width: 66px; height: 66px; }
   .world-bubble { font-size: 12px; }
-  .movement { left: 16px; bottom: calc(var(--safe-bottom) + 76px); grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(2, 50px); }
+  #joystick { --size: 124px; left: 20px; bottom: calc(var(--safe-bottom) + 84px); }
   #chat-history { right: 16px; width: min(240px, calc(100% - 198px)); max-height: 26vh; }
   #chat-form { width: calc(100% - 32px); }
 }

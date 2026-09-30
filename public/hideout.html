@@ -37,8 +37,8 @@
         <h2 id="help-title" class="help-title">How to hang out</h2>
         <ul class="help-list">
           <li>Drag the scene with a mouse or finger to look around.</li>
-          <li>Use WASD, arrow keys, or the on-screen arrows to move.</li>
-          <li>Hold and scrub across the on-screen arrows to change direction.</li>
+          <li>Use WASD, arrow keys, or the on-screen joystick to move.</li>
+          <li>Push the joystick further to walk faster.</li>
           <li>Press Enter to focus the chat box; press Enter again to send.</li>
           <li>Tap things (or aim and press E) to use them: the bar, buffet, refreshments, jukebox, served food, other players.</li>
           <li>Drinks make you drunk, food refuels you. Pass out and you are stuck until the hour, or until a friend splashes you awake.</li>
@@ -68,12 +68,9 @@
       <div id="reticle" aria-hidden="true"></div>
       <div id="world-bubbles" aria-live="polite"></div>
 
-      <nav class="movement" aria-label="Movement controls">
-        <button class="move" type="button" data-direction="up" aria-label="Move forward" disabled>↑</button>
-        <button class="move" type="button" data-direction="left" aria-label="Strafe left" disabled>←</button>
-        <button class="move" type="button" data-direction="down" aria-label="Move backward" disabled>↓</button>
-        <button class="move" type="button" data-direction="right" aria-label="Strafe right" disabled>→</button>
-      </nav>
+      <div id="joystick" class="disabled" role="application" aria-label="Movement joystick: drag to walk">
+        <div class="joystick-knob"></div>
+      </div>
 
       <div id="chat-history" role="log" aria-label="Chat history" aria-live="polite"></div>
       <form id="chat-form">

@@ -23,7 +23,7 @@ export function createHUD({ guestMode, onMessage, onMessageFocus }) {
   const bubbleLayer = document.getElementById('world-bubbles');
   const input = document.getElementById('message');
   const send = document.getElementById('send');
-  const moveButtons = [...document.querySelectorAll('.move')];
+  const joystick = document.getElementById('joystick');
   const bubbles = new Map();
 
   // The "Connected as …" pill is only a greeting: it fades after a few seconds. Progress and
@@ -120,7 +120,7 @@ export function createHUD({ guestMode, onMessage, onMessageFocus }) {
 
   function setConnected(connected) {
     input.disabled = send.disabled = !connected;
-    for (const button of moveButtons) button.disabled = !connected;
+    joystick.classList.toggle('disabled', !connected);
   }
 
   function setProfilePhoto(image, fallback, url) {
@@ -230,7 +230,7 @@ export function createHUD({ guestMode, onMessage, onMessageFocus }) {
 
   return {
     input,
-    moveButtons,
+    joystick,
     bubbles,
     setStatus,
     addDebug,
