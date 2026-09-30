@@ -77,9 +77,11 @@ export function createHideoutServer(options = {}) {
   const groupIDs = String(rawGroupIDs ?? '').split(',').map(id => id.trim());
   const debugGuestUsername = options.debugGuestUsername ?? process.env.DEBUG_GUEST_USERNAME;
   const debugGuestPassword = options.debugGuestPassword ?? process.env.DEBUG_GUEST_PASSWORD;
-  // Telegram user IDs allowed to use "/cheat ..." in chat (comma-separated). For anyone else the
-  // text is an ordinary chat message, so the command is invisible.
-  const adminIDs = new Set(String(options.adminIDs ?? process.env.ADMIN_USER_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean));
+  // Who may use "/cheat ..." in chat: comma-separated Telegram user IDs and/or @usernames. For
+  // anyone else the text is an ordinary chat message, so the command is invisible.
+  const admins = new Set(String(options.adminIDs ?? process.env.ADMIN_USER_IDS ?? '').split(',').map(id => id.trim().toLowerCase()).filter(Boolean));
+  const isAdmin = session => !session.guest &&
+    (admins.has(String(session.id)) || (session.name?.startsWith('@') && admins.has(session.name.toLowerCase())));
   const guestEnabled = Boolean(debugGuestUsername) && Boolean(debugGuestPassword);
   const telegramAPIBase = options.telegramAPIBase ?? 'https://api.telegram.org';
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -389,7 +391,7 @@ export function createHideoutServer(options = {}) {
       if (message?.type === 'chat' && typeof message.text === 'string') {
         const text = message.text.trim();
         if (!text || text.length > 500) return;
-        if (!session.guest && adminIDs.has(playerID) && /^\/cheat\s/i.test(text)) {
+        if (isAdmin(session) && /^\/cheat\s/i.test(text)) {
           game.cheat(playerID, text.slice(7));
           return;
         }

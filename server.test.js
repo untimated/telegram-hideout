@@ -42,6 +42,7 @@ test('only signed group members can connect and relay chat under their verified 
     groupID: '-100123, -100456',
     debugGuestUsername: 'debug',
     debugGuestPassword: 'secret',
+    adminIDs: '@Alice',
     now: () => now,
     moveNow: () => moveTime,
     // The old fixed spawn slots keep the positions below predictable.
@@ -225,6 +226,20 @@ test('only signed group members can connect and relay chat under their verified 
       assert.deepEqual(JSON.parse(data.toString()), { type: 'chat', id: name === '@alice' ? '1' : '2', name, text });
     }
   }
+  // An admin's cheat is never relayed; the same text from anyone else is ordinary chat.
+  const cheatBarrier = once(b, 'message');
+  const aliceSaw = [];
+  const aliceChat = new Promise(resolve => a.on('message', function listen(data) {
+    const message = JSON.parse(data.toString());
+    aliceSaw.push(message.type);
+    if (message.type === 'chat') { a.off('message', listen); resolve(); }
+  }));
+  a.send(JSON.stringify({ type: 'chat', text: '/cheat money 5' }));
+  b.send(JSON.stringify({ type: 'chat', text: '/cheat money 5' }));
+  assert.deepEqual(JSON.parse((await cheatBarrier)[0].toString()), { type: 'chat', id: '2', name: '@bob', text: '/cheat money 5' });
+  await aliceChat;
+  assert.deepEqual(aliceSaw, ['self', 'notice', 'chat']);
+
   for (const [direction, x, z] of [['right', -3.7, 5.5], ['up', -3.7, 5.2]]) {
     moveTime += 200;
     const registered = Promise.all([once(a, 'message'), once(b, 'message')]);
