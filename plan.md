@@ -40,7 +40,7 @@ No path finding needed, just let them appear on their designated place...
 or ocasionally give them static round patrol movement
 
 - Plain Joe 
-  Time     : 11AM-3PM & 5PM to 7PM
+  Time     : 11AM-3PM & 5PM to 11PM
   Position : at Table 2
   Activity : Lunch (just sitting for now) & Dinner
 - Nicholas came at 

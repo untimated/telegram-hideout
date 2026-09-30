@@ -16,7 +16,7 @@ export const NPCS = Object.freeze([
     lines: ['Oui? The buffet is hot.', 'Try the smash burger.', 'Nobody leaves my kitchen hungry.'],
   },
   {
-    id: 'joe', name: 'Plain Joe', role: 'Regular', shifts: [[11, 15], [17, 19]],
+    id: 'joe', name: 'Plain Joe', role: 'Regular', shifts: [[11, 15], [17, 23]],
     x: 2.78, z: -3.15, yaw: -Math.PI / 2, activity: 'sit',
     lines: ['Just having lunch.', 'Dinner time already?', 'Same table, every day.', 'The fried rice is good today.'],
   },
