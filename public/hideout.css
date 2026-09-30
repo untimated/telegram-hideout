@@ -12,7 +12,22 @@
 * { box-sizing: border-box; }
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #17213c; }
 button, input { font: inherit; }
-button { -webkit-tap-highlight-color: transparent; }
+/* Game mode: no blue tap flashes, text selection, long-press callouts or image drags. Text
+   entry and the chat history stay selectable so messages can still be typed and copied. */
+#app {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#app input, #app textarea, #chat-history {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+#app img, #app canvas { -webkit-user-drag: none; }
+/* Keep the focus ring for keyboards only, not after a tap or click. */
+#app:focus, #app :focus:not(:focus-visible) { outline: none; }
 
 #app { position: relative; width: 100%; height: 100dvh; min-height: 420px; isolation: isolate; }
 #scene {
