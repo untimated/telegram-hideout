@@ -19,8 +19,19 @@ client-server websocket.
 ## Interaction
 Some objects and all players are interactable (point click) 
 and will show HTML UI.
-- Buying drinks and food through the bartender (money will be refilled everyday like manga-up coin)
-- Jukebox will show  up two selections of music (default silent) send to server and send play-command to other players as well (same with pause - by default repeat).
+- on buy food : 
+     - order food -> food have different 3D model, serve it on static location like certain spot (like table)
+     - use food  -> this is when player consume the food by first interacting with it
+                   other player can eat it, basically a drop item
+- on buy drink (same as food): 
+     - order drink -> drink have different 3D model, serve it on static location like certain bar spot
+     - use drink   -> this is when player consume the drink by first interacting with it
+                   other player can drink it, basically a drop item
+
+- on using Jukebox 
+    - order song   -> pick from list , spend coin for each
+    - play song    -> notify other players to play the same
+    just like drop item, any player can just go to the box and turn off your music, coin is already paid
 
 
 ## NPCS
@@ -29,9 +40,9 @@ No path finding needed, just let them appear on their designated place...
 or ocasionally give them static round patrol movement
 
 - Plain Joe 
-  Time     : 11AM-3PM
+  Time     : 11AM-3PM & 5PM to 7PM
   Position : at Table 2
-  Activity : Lunch (just sitting for now)
+  Activity : Lunch (just sitting for now) & Dinner
 - Nicholas came at 
   Time     : 5AM-9PM
   Position : By Jukebox
@@ -61,24 +72,36 @@ persist it in local storage if possible, but if mini app (telegram webvie) can't
 
 ## Trading
 we can provide transfer coin as well for our poor friends
+open modal: 
+------------------
+  Cash [inhand] 
+  Amount [value]
+Transfer | Cancel
+------------------
 
 ## Goods
 I'll provide the icon later, use default first
 Bar Menu (interact with Wolfred) :
-- Pint of Beer - 20 coin
-- Highball     - 30 coin
-- Mojito       - 40 coin
-- Gossip Sherry(wine) - 50 coin
+- Pint of Beer - 20 coin  (drunk + 0.2, fuel -0.1)
+- Highball     - 30 coin  (drunk + 0.2, fuel -0.2)
+- Mojito       - 40 coin  (drunk + 0.1, fuel  -0.05)
+- Sherry       - 50 coin  (drunk + 0.2, fuel -0.2)
+- **Saturday's Special**       - 50 coin (drunk +1.0, fuel -1.0)   -- only shows on saturday
+- **Wednesdays's Special**       - 50 coin (drunk +1.0, fuel -1.0)   -- only shows on saturday
+for Special menu, put a poster that can be interaceted and popped out a modal
 
 Food Menu (buffer counter interaction) :
-- Gossip's original Breakfast   - 20 coin
-- Uncle's Fried Rice            - 30 Coin
-- Pierre's Smash Burger         - 15 coin
+- English Breakfast             - 20 coin  (drunk -0.2, fuel +0.2)
+- Uncle's Fried Rice            - 30 Coin  (drunk -0.3, fuel +0.3)
+- Pierre's Smash Burger         - 15 coin  (durnk -0.2, fuel +0.3)
+- **Saturday's Challenge**     - 50 coin (drunk -1.0, fuel +1.0)   -- only shows on saturday
+- **Thursday's Challenge**     - 50 coin (drunk -1.0, fuel +1.0)   -- only shows on saturday
+for Special menu, put a poster that can be interaceted and popped out a modal
 
 Complementary Menu (Fountain area) :
 - Chocolate Fondue  - 10 coin
 - Orange Juice      - 5 coin
-- Apple Juice      - 5 coin
+- Apple Juice       - 5 coin
 
 Jukebox : 
 - Determined Vaporwave By Catch22Music  - 10 coin
@@ -86,7 +109,14 @@ Jukebox :
  
 
 # Mood / State
-Consuming something, or doing something induces effects scale from -1 to 1
-- Drunk
-- Rested
-- Hunger
+Consuming something, or doing something induces effects scale from 0 to 1
+for now we just do two things
+- Drunk   (start from 0)
+  on drunk > 0.5, do blurry post process (blurrines = map_value(drunk, 0.0, 1.0))
+  on drunk == 1, do sleep pose, cannot move from the floor
+  every hour active (exact at 1,2,3..) -> reduce drunk by -0.3 (free heal)
+  (if has_not_login_today && now > 1am) -> restore drunk to 0
+- Fuel  (start from 1)
+  on energy == 0.0 -> do sleep pose, cannot move from the floor
+  every hour active (exact at 1,2,3..) -> reduce energy by 0.1 
+  (if has_not_login_today && now > 1am) -> restore energy to 1.0

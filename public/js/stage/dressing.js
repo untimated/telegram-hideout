@@ -1,11 +1,13 @@
 import { HALF as half } from './layout.js';
+import { buildArtDetails } from './art-details.js';
 
 // Plants, paintings and wall lights that finish the walls.
-export function buildDressing({ models, place }) {
+export function buildDressing(context) {
+  const { models, place } = context;
   for (const [x, z, seed] of [
     [6, -5.6, 17], [6, -1.9, 21], [6, 1.9, 26],
     [-6.05, 2.1, 32], [-5.7, 6.1, 39], [-2.3, 6.1, 42],
-  ]) place(models.PottedPlant(.62, seed), x, 0, z);
+  ]) place(models.PottedPlant(.78, seed, true), x, 0, z);
 
   // East wall: three small procedural frames, lit by alternating warm/magenta sconces.
   for (const z of [-3.4, -.6, 2.2]) place(models.WallArtFrame(.8, .58), 6.37, 1.95, z, -Math.PI / 2);
@@ -18,4 +20,5 @@ export function buildDressing({ models, place }) {
   // North wall sconces beside the bar sign.
   place(models.WallLight('magenta'), -6.2, 1.85, -6.36);
   place(models.WallLight('cyan'), 0, 1.85, -6.36);
+  buildArtDetails(context);
 }

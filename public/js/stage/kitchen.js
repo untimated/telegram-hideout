@@ -20,7 +20,7 @@ export function buildKitchen({ models, place, interactable }) {
   place(models.CookingUtensil('spatula'), 4.2, .94, kz);
 
   const buffet = place(models.BuffetCounter(5.4), 3.5, 0, -7);
-  interactable('buffet', buffet, { label: 'Buffet', approach: { x: 3.5, z: -5.9, yaw: 0 } });
+  interactable('buffet', buffet, { label: 'Buffet', approach: { x: 3.5, z: -5.9, yaw: 0 }, action: { type: 'menu', menu: 'food' } });
   for (const x of [2.0, 2.9, 3.8, 4.7]) place(models.ChafingDish(), x, .98, -7);
   place(models.PlateStack(5), 5.6, .98, -7);
   place(models.CupStack(3), 1.2, .98, -7);

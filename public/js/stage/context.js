@@ -2,7 +2,8 @@ import { createModelKit } from '../models/index.js';
 
 // Everything a stage module needs: the model kit, the level group, placement helpers, and the
 // registries other systems read (interactables to click on, per-frame animators).
-export function createStageContext(THREE, scene, { Robot, floorEnvironment } = {}) {
+// `now()` is the shared clock in ms (server-corrected), used for NPC shifts and specials.
+export function createStageContext(THREE, scene, { Robot, floorEnvironment, now = () => Date.now() } = {}) {
   const models = createModelKit(THREE, { Robot });
   if (floorEnvironment) {
     models.materials.floor.envMap = floorEnvironment;
@@ -33,21 +34,27 @@ export function createStageContext(THREE, scene, { Robot, floorEnvironment } = {
   }
 
   // Things a player can click or walk up to. Each entry is
-  //   { id, label, object, approach: { x, z, yaw } }
-  // where `approach` is where a player stands to use it, facing `yaw` (0 faces -z). The list is
-  // live on level.userData.interactables; picking and UI panels are built on top of it.
+  //   { id, label, object, approach: { x, z, yaw }, action }
+  // where `approach` is where a player stands to use it, facing `yaw` (0 faces -z), and `action`
+  // tells the HUD what to open ({ type: 'menu', menu: 'bar' }, { type: 'npc', npc }, ...). The
+  // list is live on level.userData.interactables; interaction.js picks against it.
   const interactables = [];
-  function interactable(id, object, { label = id, approach } = {}) {
+  function interactable(id, object, { label = id, approach, action = { type: id } } = {}) {
     object.userData.interaction = id;
     object.userData.interactable = true;
-    interactables.push({ id, label, object, approach });
+    interactables.push({ id, label, object, approach, action });
     return object;
   }
   level.userData.interactables = interactables;
+
+  // Furniture a player can sit on; `seatIDs` are the places it holds (see game/seats.js).
+  function seatable(object, seatIDs, label = 'Seat') {
+    return interactable(`seat:${seatIDs[0]}`, object, { label, action: { type: 'seat', seats: seatIDs } });
+  }
 
   // Callbacks run every frame with elapsed seconds; see level.userData.animate.
   const animators = [];
   level.userData.animate = time => { for (const animate of animators) animate(time); };
 
-  return { THREE, scene, models, level, place, unlit, interactable, animators };
+  return { THREE, scene, models, level, place, unlit, interactable, seatable, animators, now };
 }

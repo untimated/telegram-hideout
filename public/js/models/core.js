@@ -1,5 +1,5 @@
-// Seamless polished-stone maps drawn once: a bumpy normal map plus a mottled roughness map, so the
-// floor is glossy in patches instead of uniformly plastic. One tile covers STONE_TILE metres.
+// Seamless polished-stone maps drawn once: subtle broad variation keeps the tiles smooth
+// while breaking up perfectly uniform reflections. One tile covers STONE_TILE metres.
 export const STONE_TILE = 3;
 
 // Pool tile photo-texture (ambientCG Tiles132A). One texture repeat covers this many metres.
@@ -163,7 +163,7 @@ function createStoneTextures(THREE) {
   const height = new Float32Array(size * size);
   const patches = noise(5, 1);
   let total = 0;
-  for (const [cells, weight] of [[6, 1], [12, .55], [24, .25], [48, .1]]) {
+  for (const [cells, weight] of [[4, 1], [8, .22], [16, .05]]) {
     const layer = noise(cells, weight);
     for (let index = 0; index < layer.length; index++) height[index] += layer[index];
     total += weight;
@@ -179,8 +179,8 @@ function createStoneTextures(THREE) {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const index = y * size + x;
-      // Glossy where the broad patch noise is low, satin where it is high.
-      const value = Math.min(1, Math.max(0, .2 + patches[index] * .34 + (height[index] - .5) * .35 + random() * .04));
+      // Gentle satin variation, rather than cloudy patches that resemble worn stone.
+      const value = Math.min(1, Math.max(0, .33 + patches[index] * .08 + (height[index] - .5) * .08 + random() * .006));
       rough.data.set([0, value * 255, 0, 255], index * 4);
       const dx = (at(x + 1, y) - at(x - 1, y)) * 9;
       const dy = (at(x, y + 1) - at(x, y - 1)) * 9;
@@ -218,7 +218,7 @@ export function createProceduralTools(THREE) {
     new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra });
 
   const materials = {
-    floor: standard(0x3a4058, 1, .22, { ...stone, normalScale: new THREE.Vector2(.28, .28) }),
+    floor: standard(0x3a4058, 1, .22, { ...stone, normalScale: new THREE.Vector2(.06, .06) }),
     wall: standard(0x121a2d, .68, .32),
     wallTrim: standard(0x303b58, .4, .52),
     pillar: standard(0x222c43, .38, .58),

@@ -1,0 +1,128 @@
+[
+  {
+    "id": "pierres-smash-burger",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.524,
+    "pngBytes": 88670
+  },
+  {
+    "id": "english-breakfast",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.516,
+    "pngBytes": 83786
+  },
+  {
+    "id": "uncles-fried-rice",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.561,
+    "pngBytes": 72703
+  },
+  {
+    "id": "saturday-challenge",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.559,
+    "pngBytes": 73810
+  },
+  {
+    "id": "thursday-challenge",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.581,
+    "pngBytes": 65112
+  },
+  {
+    "id": "pint-of-beer",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.661,
+    "pngBytes": 62280
+  },
+  {
+    "id": "highball",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.693,
+    "pngBytes": 65935
+  },
+  {
+    "id": "mojito",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.669,
+    "pngBytes": 58658
+  },
+  {
+    "id": "sherry",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.731,
+    "pngBytes": 52098
+  },
+  {
+    "id": "saturday-special",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.672,
+    "pngBytes": 60062
+  },
+  {
+    "id": "wednesday-special",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.682,
+    "pngBytes": 65249
+  },
+  {
+    "id": "chocolate-fondue",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.456,
+    "pngBytes": 93830
+  },
+  {
+    "id": "orange-juice",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.573,
+    "pngBytes": 78249
+  },
+  {
+    "id": "apple-juice",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.6,
+    "pngBytes": 75174
+  }
+]

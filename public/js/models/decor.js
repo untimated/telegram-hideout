@@ -1,6 +1,14 @@
+import { createJukeboxModel } from './jukebox.js';
+
 export function createDecorModels(t, architecture) {
   const { THREE, materials: m, group, box, cylinder, sphere, torus, rod, rng } = t;
   const { NeonStrip, RecessedStepLight } = architecture;
+  const broadLeafMaterials = [m.leaf, m.leafLight, m.leafDark].map(material => {
+    const leaf = material.clone();
+    leaf.side = THREE.DoubleSide;
+    leaf.flatShading = true;
+    return leaf;
+  });
 
   function Shrub(size = 1, seed = 1) {
     const model = group('Shrub');
@@ -32,8 +40,42 @@ export function createDecorModels(t, architecture) {
     return model;
   }
 
-  function PottedPlant(size = 1, seed = 1) {
+  function PottedPlant(size = 1, seed = 1, leafy = false) {
     const model = group('PottedPlant');
+    if (leafy) {
+      // Broad, folded leaves and a square planter echo the indoor concept plants.
+      const random = rng(seed);
+      box(model, m.darkMetal, .39 * size, .06 * size, .39 * size, 0, .03 * size, 0);
+      const pot = box(model, m.plantPot, .46 * size, .5 * size, .46 * size, 0, .31 * size, 0);
+      const positions = pot.geometry.attributes.position;
+      for (let i = 0; i < positions.count; i++) {
+        if (positions.getY(i) < 0) positions.setXYZ(i, positions.getX(i) * .8, positions.getY(i), positions.getZ(i) * .8);
+      }
+      pot.geometry.computeVertexNormals();
+      box(model, m.soil, .4 * size, .02 * size, .4 * size, 0, .56 * size, 0);
+      for (let i = 0; i < 9; i++) {
+        const angle = i * 2.399 + random() * .25;
+        const length = (.36 + random() * .15) * size;
+        const width = length * .32;
+        const base = new THREE.Vector3(0, (.62 + (i % 3) * .12) * size, 0);
+        const direction = new THREE.Vector3(Math.cos(angle), .35 + random() * .65, Math.sin(angle)).normalize();
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+          0, 0, 0, -width, length * .45, 0, 0, length * .5, length * .12,
+          width, length * .45, 0, 0, length, 0,
+        ], 3));
+        geometry.setIndex([0, 2, 1, 1, 2, 4, 4, 2, 3, 3, 2, 0]);
+        geometry.computeVertexNormals();
+        const leaf = new THREE.Mesh(geometry, broadLeafMaterials[i % 3]);
+        leaf.position.copy(base);
+        leaf.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+        leaf.castShadow = leaf.receiveShadow = true;
+        model.add(leaf);
+        const stemEnd = base.clone().addScaledVector(direction, length * .35);
+        rod(model, m.leafDark, [0, .54 * size, 0], stemEnd.toArray(), .012 * size, 5);
+      }
+      return model;
+    }
     const pot = PlantPot(size);
     const shrub = Shrub(size, seed);
     shrub.position.y = .26 * size;
@@ -147,32 +189,7 @@ export function createDecorModels(t, architecture) {
   }
 
   function Jukebox() {
-    const model = group('Jukebox');
-    box(model, m.wood, .78, 1.52, .42, 0, .76, 0);
-    const arch = new THREE.Mesh(
-      new THREE.SphereGeometry(.39, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), m.woodLight,
-    );
-    arch.position.y = 1.52;
-    arch.scale.z = .54;
-    model.add(arch);
-    const archLight = new THREE.Mesh(new THREE.TorusGeometry(.33, .025, 8, 24, Math.PI), m.neonWarm);
-    archLight.position.set(0, 1.5, .235);
-    model.add(archLight);
-    box(model, m.black, .59, 1.22, .035, 0, .98, .225);
-    box(model, m.neonMagenta, .045, 1.18, .025, -.32, .98, .25);
-    box(model, m.neonMagenta, .045, 1.18, .025, .32, .98, .25);
-    box(model, m.darkMetal, .5, .28, .025, 0, 1.57, .25);
-    for (const y of [1.49, 1.57, 1.65]) {
-      box(model, m.neonWarm, .34, .015, .018, 0, y, .272);
-    }
-    for (const y of [.4, .76]) {
-      cylinder(model, m.darkMetal, .14, .14, .035, 0, y, .258, 20).rotation.x = Math.PI / 2;
-      torus(model, m.brass, .12, .015, 0, y, .285);
-    }
-    for (let index = 0; index < 5; index++) {
-      cylinder(model, m.neonCyan, .027, .027, .035, -.2 + index * .1, 1.28, .26, 12).rotation.x = Math.PI / 2;
-    }
-    return model;
+    return createJukeboxModel(t);
   }
 
   function StagePlatform(width = 3.2, depth = 1.9) {

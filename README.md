@@ -96,16 +96,69 @@ interactions can grow without mixing DOM, networking, and rendering code:
 The server serves every `.js` file under `public/js/` automatically (read once at startup, so
 restart after edits). Textures and paintings under `assets/` are listed explicitly in
 `server.js`. Keep them small: the pool tile maps are about 2.4 MB and the paintings are WebP.
+Songs (`/music/<song id>.mp3`, from the files named in `catalog.js`) are served with Range
+support so clients can seek to the shared position; menu icons are served from
+`assets/menu-icons/` for catalog item ids only.
 
-## Interaction plan
+## Gameplay
 
-The level exposes what a player can use through `level.userData.interactables`, a list of
-`{ id, label, object, approach: { x, z, yaw } }` for the bar, buffet, jukebox, refreshment
-island, stage and the two NPCs (`approach` is where a player stands, facing `yaw`; 0 faces -z).
-Picking, selection outlines, and contextual HTML panels are not built yet. The intended
-boundary is world-side targets (raycast against `interactables[].object`, outline on hover) and
-HUD-side panels (menus, jukebox controls) driven by the interactable id. Purchases, coins and
-jukebox sync need server messages and are not designed yet.
+Walk up to something: when it is within 3 m of your eye under the crosshair it gets a warm rim
+light and an "E · …" hint, and E or a tap opens its panel (taps from further away do nothing):
+
+- **Bar / Wolfred**, **Buffet / Pierre** and the **Refreshments** island open menus. Orders cost
+  coins and are served as a 3D item on a free spot (bar counter, café tables, the island).
+  Anyone can then tap a served item and eat or drink it; the effects go to whoever consumes it.
+  The bar and buffet only sell while their NPC is on shift.
+- **Chalkboard easels** by the bar and the kitchen show the weekday specials.
+- **Jukebox**: pay 10 coins to play a song for the whole room, synced by start time; anyone can
+  stop it. Volume falls off with distance, and the bar ambience loops underneath.
+- **Seats**: bar stools, café chairs, the fountain cubes and the sofas (`game/seats.js`). Tap one to
+  sit (one player per seat; Plain Joe keeps his chair during his shift); walking stands you up.
+- **Other players**: send coins, or splash water on someone who passed out.
+- **Mood**: `drunk` (0..1) blurs and sways the view above 0.5 and knocks you out at 1; `fuel`
+  (1..0) knocks you out at 0. Passed-out players lie on the floor and cannot move. Each
+  wall-clock hour online sobers you by 0.3 and burns 0.1 fuel (and a nap restores some fuel).
+- **Coins**: 100 to start, +100 each Hideout day (days roll over at 1 AM), carried over.
+
+Where the pieces live:
+
+- `public/js/game/` is shared by the server and the browser: `catalog.js` (menus, prices,
+  effects, songs, serving spots), `npcs.js` (NPC shifts, spots and activities), `rules.js` (mood
+  rules) and `clock.js` (the shared Hideout time zone, `Asia/Jakarta` by default).
+- `game.js` is the authoritative server side: wallets and moods, served items, the jukebox,
+  transfers and hourly/daily ticks. Wallets live in memory; after a server restart each player's
+  first `restore` message (their localStorage copy) is accepted once.
+- `public/js/interaction.js` raycasts taps against `level.userData.interactables`, served items
+  and other players; `public/js/panels.js` is the HUD (meters, menus, modals, toasts);
+  `public/js/items.js` builds the served food and drink models; `public/js/audio.js` plays the
+  jukebox and ambience; `public/js/stage/npcs.js` shows NPCs during their shifts and animates
+  them; `public/js/stage/boards.js` draws the specials easels.
+- Menu pictures are optional: `assets/menu-icons/<item id>.webp` (or .png) replaces the emoji.
+
+Socket messages on top of move/orientation/chat: the client sends `buy`, `consume`,
+`jukebox_play`, `jukebox_stop`, `transfer`, `splash` and `restore`; the server sends `self` (your
+coins and mood), `item_added`, `item_removed`, `jukebox`, `player_state` (asleep), `notice`
+(to one player) and `activity` (a line in everyone's chat log). `welcome` carries a `game`
+snapshot.
+
+Debug guests can preview another hour's NPCs and specials with `&hour=14` in the URL. This is
+view only: the server still sells by real Hideout time.
+
+## Performance
+
+"Show log" prints live render stats (fps, frame time, draw calls, triangles, shaders, resolution).
+
+- `public/js/stage/bake.js` merges the static level by material after it is built (about 1,600
+  meshes into 66) and merges each robot's rigid parts (about 100 meshes per robot into 20-ish).
+  Interactables, NPCs, served items, transparent meshes and anything marked
+  `userData.dynamic = true` are left separate; mark new moving props that way.
+- The shadow map is rendered once after loading (`shadowMap.autoUpdate = false`); characters
+  and items use blob shadows.
+- `public/js/quality.js` lowers the render resolution on slow devices (down to 0.75x) and, as a
+  last step, turns off the small lamp point lights.
+
+Three.js already frustum-culls every object; with the level merged, draw calls and per-pixel
+lighting (22 real-time lights) are what cost frames, not culling.
 
 ## Debug guest access
 
@@ -152,6 +205,12 @@ For the first shared-room test, use these service settings:
 - Set maximum instances to `1` while chat state lives only in one process.
 - Increase the request timeout for WebSocket sessions (for example, `3600` seconds).
 - Keep HTTP/2 end-to-end disabled for WebSockets.
+
+Wallets (coins, drunk, fuel) live in server memory and are lost when the instance
+restarts or scales to zero. Each client keeps a backup copy, in Telegram
+CloudStorage inside Telegram and in localStorage elsewhere (`public/js/wallet-store.js`).
+The server accepts that copy once per player after a restart, before they spend
+anything. It is not tamper-proof, which is fine for a friends' bar.
 
 Open the BotFather Mini App link from two Telegram accounts and send a message
 from each. A new Cloud Run revision or instance restart clears the room. Maximum

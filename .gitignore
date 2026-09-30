@@ -1,3 +1,29 @@
+# Dependencies
 node_modules/
 .pnpm-store/
+
+# Secrets (keep .env.example)
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+
+# Asset sources and previews (the server only serves the optimised files)
+assets/menu-icons/originals/
+assets/menu-icons/preview.png
+assets/**/*.wav
+assets/**/*.psd
+assets/**/*.blend
+assets/**/*.blend1
+assets/**/*.kra
+
+# Logs, OS and editor files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

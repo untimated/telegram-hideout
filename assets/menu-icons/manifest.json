@@ -1,0 +1,159 @@
+{
+  "style": "Faceted 3D illustration; warm key light, subtle cyan/magenta accents; transparent background",
+  "icons": [
+    {
+      "id": "pierres-smash-burger",
+      "label": "Pierre's Smash Burger",
+      "category": "food",
+      "provisional": false,
+      "file": "pierres-smash-burger.png",
+      "original": "originals/pierres-smash-burger.png",
+      "webp": "pierres-smash-burger.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "english-breakfast",
+      "label": "English Breakfast",
+      "category": "food",
+      "provisional": false,
+      "file": "english-breakfast.png",
+      "original": "originals/english-breakfast.png",
+      "webp": "english-breakfast.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "uncles-fried-rice",
+      "label": "Uncle's Fried Rice",
+      "category": "food",
+      "provisional": false,
+      "file": "uncles-fried-rice.png",
+      "original": "originals/uncles-fried-rice.png",
+      "webp": "uncles-fried-rice.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "saturday-challenge",
+      "label": "Saturday's Challenge",
+      "category": "food",
+      "provisional": true,
+      "file": "saturday-challenge.png",
+      "original": "originals/saturday-challenge.png",
+      "webp": "saturday-challenge.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "thursday-challenge",
+      "label": "Thursday's Challenge",
+      "category": "food",
+      "provisional": true,
+      "file": "thursday-challenge.png",
+      "original": "originals/thursday-challenge.png",
+      "webp": "thursday-challenge.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "pint-of-beer",
+      "label": "Pint of Beer",
+      "category": "bar",
+      "provisional": false,
+      "file": "pint-of-beer.png",
+      "original": "originals/pint-of-beer.png",
+      "webp": "pint-of-beer.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "highball",
+      "label": "Highball",
+      "category": "bar",
+      "provisional": false,
+      "file": "highball.png",
+      "original": "originals/highball.png",
+      "webp": "highball.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "mojito",
+      "label": "Mojito",
+      "category": "bar",
+      "provisional": false,
+      "file": "mojito.png",
+      "original": "originals/mojito.png",
+      "webp": "mojito.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "sherry",
+      "label": "Sherry",
+      "category": "bar",
+      "provisional": false,
+      "file": "sherry.png",
+      "original": "originals/sherry.png",
+      "webp": "sherry.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "saturday-special",
+      "label": "Saturday's Special",
+      "category": "bar",
+      "provisional": true,
+      "file": "saturday-special.png",
+      "original": "originals/saturday-special.png",
+      "webp": "saturday-special.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "wednesday-special",
+      "label": "Wednesday's Special",
+      "category": "bar",
+      "provisional": true,
+      "file": "wednesday-special.png",
+      "original": "originals/wednesday-special.png",
+      "webp": "wednesday-special.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "chocolate-fondue",
+      "label": "Chocolate Fondue",
+      "category": "refreshments",
+      "provisional": false,
+      "file": "chocolate-fondue.png",
+      "original": "originals/chocolate-fondue.png",
+      "webp": "chocolate-fondue.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "orange-juice",
+      "label": "Orange Juice",
+      "category": "refreshments",
+      "provisional": false,
+      "file": "orange-juice.png",
+      "original": "originals/orange-juice.png",
+      "webp": "orange-juice.webp",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "id": "apple-juice",
+      "label": "Apple Juice",
+      "category": "refreshments",
+      "provisional": false,
+      "file": "apple-juice.png",
+      "original": "originals/apple-juice.png",
+      "webp": "apple-juice.webp",
+      "width": 256,
+      "height": 256
+    }
+  ]
+}

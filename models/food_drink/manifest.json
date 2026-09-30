@@ -1,0 +1,189 @@
+{
+  "format": "glTF 2.0 binary",
+  "units": "metres",
+  "origin": "bottom centre; +y up",
+  "models": [
+    {
+      "id": "english-breakfast",
+      "file": "english-breakfast.glb",
+      "meshes": 15,
+      "triangles": 442,
+      "bytes": 41476,
+      "sizeMetres": [
+        0.288,
+        0.043,
+        0.3
+      ],
+      "provisional": false
+    },
+    {
+      "id": "uncles-fried-rice",
+      "file": "uncles-fried-rice.glb",
+      "meshes": 11,
+      "triangles": 324,
+      "bytes": 27352,
+      "sizeMetres": [
+        0.268,
+        0.0905,
+        0.28
+      ],
+      "provisional": false
+    },
+    {
+      "id": "pierres-smash-burger",
+      "file": "pierres-smash-burger.glb",
+      "meshes": 12,
+      "triangles": 374,
+      "bytes": 32420,
+      "sizeMetres": [
+        0.248,
+        0.128,
+        0.26
+      ],
+      "provisional": false
+    },
+    {
+      "id": "saturday-challenge",
+      "file": "saturday-challenge.glb",
+      "meshes": 5,
+      "triangles": 194,
+      "bytes": 13856,
+      "sizeMetres": [
+        0.308,
+        0.152,
+        0.32
+      ],
+      "provisional": true
+    },
+    {
+      "id": "thursday-challenge",
+      "file": "thursday-challenge.glb",
+      "meshes": 5,
+      "triangles": 194,
+      "bytes": 14008,
+      "sizeMetres": [
+        0.308,
+        0.152,
+        0.32
+      ],
+      "provisional": true
+    },
+    {
+      "id": "chocolate-fondue",
+      "file": "chocolate-fondue.glb",
+      "meshes": 13,
+      "triangles": 348,
+      "bytes": 33776,
+      "sizeMetres": [
+        0.248,
+        0.107,
+        0.26
+      ],
+      "provisional": false
+    },
+    {
+      "id": "pint-of-beer",
+      "file": "pint-of-beer.glb",
+      "meshes": 5,
+      "triangles": 200,
+      "bytes": 15324,
+      "sizeMetres": [
+        0.092,
+        0.1617,
+        0.088
+      ],
+      "provisional": false
+    },
+    {
+      "id": "highball",
+      "file": "highball.glb",
+      "meshes": 7,
+      "triangles": 208,
+      "bytes": 18568,
+      "sizeMetres": [
+        0.074,
+        0.1682,
+        0.0704
+      ],
+      "provisional": false
+    },
+    {
+      "id": "mojito",
+      "file": "mojito.glb",
+      "meshes": 10,
+      "triangles": 236,
+      "bytes": 24216,
+      "sizeMetres": [
+        0.082,
+        0.2096,
+        0.078
+      ],
+      "provisional": false
+    },
+    {
+      "id": "sherry",
+      "file": "sherry.glb",
+      "meshes": 6,
+      "triangles": 204,
+      "bytes": 16216,
+      "sizeMetres": [
+        0.0837,
+        0.1467,
+        0.088
+      ],
+      "provisional": false
+    },
+    {
+      "id": "saturday-special",
+      "file": "saturday-special.glb",
+      "meshes": 11,
+      "triangles": 288,
+      "bytes": 27312,
+      "sizeMetres": [
+        0.0848,
+        0.182,
+        0.088
+      ],
+      "provisional": true
+    },
+    {
+      "id": "wednesday-special",
+      "file": "wednesday-special.glb",
+      "meshes": 11,
+      "triangles": 288,
+      "bytes": 27316,
+      "sizeMetres": [
+        0.0848,
+        0.182,
+        0.088
+      ],
+      "provisional": true
+    },
+    {
+      "id": "orange-juice",
+      "file": "orange-juice.glb",
+      "meshes": 5,
+      "triangles": 184,
+      "bytes": 14496,
+      "sizeMetres": [
+        0.08,
+        0.1308,
+        0.0761
+      ],
+      "provisional": false
+    },
+    {
+      "id": "apple-juice",
+      "file": "apple-juice.glb",
+      "meshes": 7,
+      "triangles": 216,
+      "bytes": 19460,
+      "sizeMetres": [
+        0.1226,
+        0.1256,
+        0.0704
+      ],
+      "provisional": false
+    }
+  ]
+}

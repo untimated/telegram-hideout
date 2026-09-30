@@ -1,4 +1,5 @@
 import { CHARACTER_SCALE } from './config.js';
+import { addRobotDetails } from './models/robot-details.js';
 export function createRobotCharacterFactory(THREE, scene, { guestMode, getGuestSessionToken, addDebug }) {
   const characterPalette = ['#e97858', '#4f8fd8', '#48a88e', '#a06bd2', '#dfa63f', '#d95f91', '#4ba9b8', '#8ba84c'];
 
@@ -80,7 +81,7 @@ export function createRobotCharacterFactory(THREE, scene, { guestMode, getGuestS
         }
         if (source.startsWith('/avatars/')) {
           try {
-            const response = await fetch(source, {
+            const response = await fetch(`${location.origin}${source}`, {
               credentials: 'same-origin',
               headers: guestMode ? { 'X-Debug-Guest-Token': getGuestSessionToken() } : {},
             });
@@ -263,6 +264,24 @@ export function createRobotCharacterFactory(THREE, scene, { guestMode, getGuestS
     }
     group.userData.arms = arms;
     group.userData.legs = legs;
+
+    addRobotDetails(THREE, {
+      group, torso, head, arms, legs, part,
+      materials: { shell, shellLight, shellDark, jointMaterial, metalMaterial, visorMaterial, lensMaterial },
+    });
+
+    // Keep the resting silhouette, but give each forearm a real elbow pivot.
+    group.userData.forearms = arms.map(arm => {
+      const forearm = new THREE.Group();
+      forearm.position.y = -.31;
+      for (const child of [...arm.children]) {
+        if (child.position.y >= -.32) continue;
+        child.position.y += .31;
+        forearm.add(child);
+      }
+      arm.add(forearm);
+      return forearm;
+    });
 
     const avatar = new THREE.Sprite(new THREE.SpriteMaterial({
       map: avatarTexture(player),

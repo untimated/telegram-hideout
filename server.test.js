@@ -3,10 +3,19 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { once } from 'node:events';
 import { WebSocket } from 'ws';
-import { createHideoutServer } from './server.js';
+import { createHideoutServer, randomSpawn } from './server.js';
 
 const botToken = '123:test-token';
 const now = 1_800_000_000;
+
+// Welcome messages carry a game snapshot; check its shape, then compare the rest exactly.
+function welcome(data) {
+  const message = JSON.parse(data.toString());
+  assert.equal(message.game.self.coins, 100);
+  assert.deepEqual(message.game.items, []);
+  delete message.game;
+  return message;
+}
 
 function signedInitData(id, name = 'Alice') {
   const params = new URLSearchParams({
@@ -35,6 +44,8 @@ test('only signed group members can connect and relay chat under their verified 
     debugGuestPassword: 'secret',
     now: () => now,
     moveNow: () => moveTime,
+    // The old fixed spawn slots keep the positions below predictable.
+    pickSpawn: taken => [{ x: -4, z: 5.5 }, { x: -5.4, z: 5.5 }, { x: -2.6, z: 5.5 }][taken.length % 3],
     fetchImpl: async (url, options) => {
       if (!url.endsWith('/getChatMember')) {
         photoCalls.push(url);
@@ -124,7 +135,7 @@ test('only signed group members can connect and relay chat under their verified 
   await refused(connectGuest(`${firstLogin.guestToken}x`), 401);
   await refused(connect(`hideout_session=${firstLogin.guestToken}`), 403);
   const guest = connectGuest(firstLogin.guestToken);
-  assert.deepEqual(JSON.parse((await once(guest, 'message'))[0].toString()), {
+  assert.deepEqual(welcome((await once(guest, 'message'))[0]), {
     type: 'welcome',
     selfID: String(Number.MAX_SAFE_INTEGER - 1),
     players: [{ id: String(Number.MAX_SAFE_INTEGER - 1), name: 'Guest 1', photoURL: null, avatarURL: null, x: -4, z: 5.5, yaw: 0, pitch: -.12 }],
@@ -138,7 +149,7 @@ test('only signed group members can connect and relay chat under their verified 
   assert.notEqual(secondLogin.guestToken, firstLogin.guestToken);
   const joinedSecond = once(guest, 'message');
   const secondGuest = connectGuest(secondLogin.guestToken);
-  assert.deepEqual(JSON.parse((await once(secondGuest, 'message'))[0].toString()), {
+  assert.deepEqual(welcome((await once(secondGuest, 'message'))[0]), {
     type: 'welcome',
     selfID: String(Number.MAX_SAFE_INTEGER - 2),
     players: [
@@ -174,10 +185,10 @@ test('only signed group members can connect and relay chat under their verified 
   await guestClosed;
 
   const a = connect(aCookie);
-  const welcomeA = JSON.parse((await once(a, 'message'))[0].toString());
+  const welcomeA = welcome((await once(a, 'message'))[0]);
   const bobJoined = once(a, 'message');
   const b = connect(bCookie);
-  const welcomeB = JSON.parse((await once(b, 'message'))[0].toString());
+  const welcomeB = welcome((await once(b, 'message'))[0]);
   assert.deepEqual(welcomeA, {
     type: 'welcome',
     selfID: '1',
@@ -217,7 +228,7 @@ test('only signed group members can connect and relay chat under their verified 
   for (const [direction, x, z] of [['right', -3.7, 5.5], ['up', -3.7, 5.2]]) {
     moveTime += 200;
     const registered = Promise.all([once(a, 'message'), once(b, 'message')]);
-    a.send(JSON.stringify({ type: 'move', direction, x: 999, z: 999 }));
+    a.send(JSON.stringify({ type: 'move', direction }));
     for (const [data] of await registered) {
       const label = direction === 'right' ? 'Strafe right' : 'Forward';
       assert.deepEqual(JSON.parse(data.toString()), { type: 'move', id: '1', name: '@alice', direction, label, yaw: 0, x, z });
@@ -239,7 +250,7 @@ test('only signed group members can connect and relay chat under their verified 
   ]) {
     moveTime += 200;
     const received = Promise.all([once(a, 'message'), once(b, 'message')]);
-    a.send(JSON.stringify({ type: 'move', direction, yaw, x: 999, z: 999 }));
+    a.send(JSON.stringify({ type: 'move', direction, yaw }));
     for (const [data] of await received) {
       const registered = JSON.parse(data);
       assert.equal(registered.x, x);
@@ -255,12 +266,35 @@ test('only signed group members can connect and relay chat under their verified 
   }
   assert.equal(boundaryMove.x, 6);
   assert.equal(boundaryMove.z, -6);
+  // Reported client positions are adopted when reachable at walking speed; a stop message only
+  // syncs; a far-off (teleport) report is approached by at most walking speed (1.5 * 1.2 * .2 + .05 m).
+  for (const [message, x, z, direction] of [
+    [{ forward: 1, strafe: 0, yaw: 0, x: 5.8, z: -5.8 }, 5.8, -5.8, 'up'],
+    [{ forward: 0, strafe: 0, yaw: 0, x: 5.7, z: -5.8 }, 5.7, -5.8, 'stop'],
+    [{ forward: 1, strafe: 0, yaw: 0, x: 0, z: 0 }, 5.412618, -5.507576, 'up'],
+  ]) {
+    moveTime += 200;
+    const registered = once(a, 'message');
+    a.send(JSON.stringify({ type: 'move', ...message }));
+    const move = JSON.parse((await registered)[0].toString());
+    assert.deepEqual([move.x, move.z, move.direction], [x, z, direction]);
+  }
   members.set('-100123:1', 'left');
   await refused(connect(aCookie), 403);
   assert.deepEqual(new Set(calls.map(call => call.chat_id)), new Set(['-100123', '-100456']));
   assert.ok(calls.some(call => call.chat_id === '-100456' && call.user_id === 2));
   a.terminate();
   b.terminate();
+});
+
+test('random spawns stay in the entrance area and keep clear of other players', () => {
+  const taken = [];
+  for (let index = 0; index < 4; index++) {
+    const spot = randomSpawn(taken);
+    assert.ok(spot.x >= -5.9 && spot.x <= -2.6 && spot.z >= 4.4 && spot.z <= 6);
+    for (const other of taken) assert.ok(Math.hypot(other.x - spot.x, other.z - spot.z) >= .9);
+    taken.push(spot);
+  }
 });
 
 test('rejects malformed group ID lists at startup', () => {
