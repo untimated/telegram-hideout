@@ -12,6 +12,25 @@ through the BotFather Mini App link. A plain browser URL cannot authenticate.
 
 Run `pnpm test` for the HTTP and two-client relay check.
 
+To announce each successful Telegram login in the group, configure the sibling
+TelegramBot service with `HIDEOUT_NOTIFICATION_CHAT_ID` (one negative group ID)
+and `HIDEOUT_NOTIFICATION_SECRET` (a random shared secret). If the bot uses
+`ALLOWED_CHAT_IDS`, the notification group must be included there. On Hideout,
+set `HIDEOUT_NOTIFICATION_URL` to `https://<telegrambot-service>/hideout/entered`
+and set the same `HIDEOUT_NOTIFICATION_SECRET`. Deploy both services. The
+existing `TelegramHook` entry point routes this endpoint; no additional Cloud
+Run service or function entry point is needed.
+
+After signature and membership checks pass, Hideout calls the endpoint with the
+verified name. TelegramBot sends plain text such as `@hermanmichael enters the
+hideout`, using only Telegram's `sendMessage`; it does not call DeepSeek or
+require AI configuration for this endpoint. Users without a username use their
+first name. Debug guests, failed logins, and WebSocket reconnects do not send
+notices. Each successful `/auth` request sends a notice, including reopening or
+reloading the Mini App. Delivery is attempted before login completes, with a
+10-second limit. A failed notice is logged and login still succeeds; there is
+no delivery retry. Leave both Hideout notification settings unset to disable.
+
 Hideout validates Telegram's signed Mini App `initData` and checks the configured
 group with `getChatMember`. Prato must be a group administrator for this lookup
 to be reliable. Only current members receive a one-hour session cookie. The

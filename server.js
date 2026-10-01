@@ -85,6 +85,11 @@ export function createHideoutServer(options = {}) {
   const guestEnabled = Boolean(debugGuestUsername) && Boolean(debugGuestPassword);
   const telegramAPIBase = options.telegramAPIBase ?? 'https://api.telegram.org';
   const fetchImpl = options.fetchImpl ?? fetch;
+  const notificationURL = options.notificationURL ?? process.env.HIDEOUT_NOTIFICATION_URL;
+  const notificationSecret = options.notificationSecret ?? process.env.HIDEOUT_NOTIFICATION_SECRET;
+  if (Boolean(notificationURL) !== Boolean(notificationSecret)) {
+    throw new Error('HIDEOUT_NOTIFICATION_URL and HIDEOUT_NOTIFICATION_SECRET must both be set');
+  }
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
   const moveNow = options.moveNow ?? (() => performance.now());
   const pickSpawn = options.pickSpawn ?? randomSpawn;
@@ -260,6 +265,22 @@ export function createHideoutServer(options = {}) {
         return;
       }
       if (!member) { response.writeHead(403).end('Group membership required'); return; }
+      if (notificationURL) {
+        try {
+          const notice = await fetchImpl(notificationURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${notificationSecret}` },
+            body: JSON.stringify({ name: user.name }),
+            signal: AbortSignal.timeout(10000),
+            redirect: 'error',
+          });
+          await notice.body?.cancel();
+          if (!notice.ok) throw new Error(`HTTP ${notice.status}`);
+        } catch (error) {
+          // A notification outage should not lock members out of the room.
+          console.error('Hideout entry notification:', String(error.message).replaceAll(notificationSecret, '[redacted]'));
+        }
+      }
       response.writeHead(200, {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store',
