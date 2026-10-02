@@ -1,13 +1,17 @@
 import { NPCS, npcPresent } from '../game/npcs.js';
 import { hideoutTime } from '../game/clock.js';
+import { BAND } from '../game/catalog.js';
 
 // NPC robots from game/npcs.js. They are not connected players, so they live in the level, not
 // the scene. Each one shows up only during its shift and loops a simple pose for its activity.
-export function buildNpcs({ THREE, models, scene, level, interactable, animators, now }) {
+export function buildNpcs({ THREE, models, scene, level, interactable, animators, now, isBandPlaying }) {
   if (!models.Robot) return;
 
   const actors = NPCS.map((npc, index) => {
-    const actor = models.Robot({ id: `npc:${npc.id}`, name: npc.name, x: npc.x, z: npc.z, yaw: npc.yaw });
+    const actor = models.Robot(
+      { id: `npc:${npc.id}`, name: npc.name, x: npc.x, z: npc.z, yaw: npc.yaw },
+      { isNPC: true, model: npc.id === 'samantha' ? 'female' : 'robot' },
+    );
     if (npc.chefHat) {
       const hat = models.ChefHat();
       hat.position.y = .29;
@@ -30,7 +34,9 @@ export function buildNpcs({ THREE, models, scene, level, interactable, animators
     if (time >= nextShiftCheck) {
       nextShiftCheck = time + 5;
       const clock = hideoutTime(now());
-      for (const actor of actors) actor.visible = npcPresent(actor.userData.npc, clock);
+      const live = isBandPlaying?.();
+      // A paid performance finishes even when it runs past the band's closing time.
+      for (const actor of actors) actor.visible = npcPresent(actor.userData.npc, clock) || (live && BAND.members.includes(actor.userData.npc.id));
     }
     for (const actor of actors) if (actor.visible) pose(actor, time + actor.userData.phase);
   });
@@ -43,6 +49,11 @@ function pose(actor, t) {
   const baseY = npc.y ?? 0;
   actor.position.y = baseY;
   actor.rotation.y = npc.yaw;
+  // Custom bodies own their proportions and elbow poses, including Samantha's microphone hand.
+  if (actor.userData.animate) {
+    actor.userData.animate(t);
+    return;
+  }
   torso.position.y = .94 + Math.sin(t * 1.6) * .006;
   head.rotation.set(0, 0, 0);
   for (const limb of [left, right, ...legs]) limb.rotation.set(0, 0, 0);

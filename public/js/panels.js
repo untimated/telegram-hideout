@@ -1,7 +1,8 @@
-import { ITEMS, ITEM_BY_ID, MENUS, SONGS, isDrink, itemAvailable } from './game/catalog.js';
+import { BAND, ITEMS, ITEM_BY_ID, MENUS, SONGS, isDrink, itemAvailable } from './game/catalog.js';
 import { formatHour, hideoutTime } from './game/clock.js';
-import { NPCS, NPC_BY_ID, npcPresent, npcShifts } from './game/npcs.js';
+import { NPC_BY_ID, npcPresent, npcShifts } from './game/npcs.js';
 import { SEAT_BY_ID } from './game/seats.js';
+import { SLOTS, maxSlotBet, slotResultText } from './game/slots.js';
 import { MUSIC_STEPS } from './audio.js';
 
 import { INTERACT_RANGE } from './interaction.js';
@@ -16,6 +17,7 @@ const CLOSE_RANGE = 4.5;
 //   state()          -> { selfID, self: { coins, drunk, fuel, asleep }, items: Map, jukebox, players: Map, sleepers: Set }
 //   position()       -> the local player's { x, z } (as drawn, not the server's copy)
 //   now()            -> shared clock in ms (NPC shifts, specials)
+//   serverNow()      -> shared clock without the debug hour override (playback)
 //   send(message)    -> sends a game message to the server
 //   audio            -> audio.js controller (jukebox progress and mute)
 export function createGamePanels({ hud, game }) {
@@ -94,7 +96,7 @@ export function createGamePanels({ hud, game }) {
   hint.hidden = true;
   const toasts = element('div', 'toasts');
   toasts.setAttribute('role', 'status');
-  const soundChip = button('sound-chip', '🔊 Tap to hear the jukebox', () => { soundChip.hidden = true; });
+  const soundChip = button('sound-chip', '🔊 Tap to hear the music', () => { soundChip.hidden = true; });
   soundChip.hidden = true;
   const sleep = element('div', 'sleep-overlay');
   sleep.hidden = true;
@@ -150,8 +152,12 @@ export function createGamePanels({ hud, game }) {
   // --- Panel contents ------------------------------------------------------------------------
   let current = null; // { key, update() } for the open panel.
   let hovered = null;
+  let resetSlotRequest = () => {};
+  let slotBet = SLOTS.minBet;
 
   function show({ key, kicker, title, build }, anchor = openedAt) {
+    if (current?.key === 'arcade') closePanel();
+    panel.classList.toggle('arcade-panel', key === 'arcade');
     panelKicker.textContent = kicker ?? '';
     panelTitle.textContent = title;
     panelBody.replaceChildren();
@@ -162,8 +168,70 @@ export function createGamePanels({ hud, game }) {
     update();
   }
   function closePanel() {
+    if (current?.key === 'arcade') game.endInspect?.();
     panel.hidden = true;
     current = null;
+    resetSlotRequest = () => {};
+  }
+
+  function openArcade(target) {
+    show({
+      key: 'arcade', kicker: 'ONE MIDDLE PAYLINE', title: 'Gossip Jackpot',
+      build(body, foot) {
+        const rules = element('details', 'slot-rules');
+        rules.append(element('summary', '', 'Prizes & odds'), element('p', 'panel-note',
+          `Two matching regular symbols: ${SLOTS.payouts.pair}× bet · ${SLOTS.odds.pair}%\nThree matching regular symbols: ${SLOTS.payouts.triple}× bet · ${SLOTS.odds.triple}%\nThree GOSSIP BAR symbols: ${SLOTS.payouts.jackpot}× bet · ${SLOTS.odds.jackpot}%\nNo match: 0 coins · ${SLOTS.odds.loss}% · −${SLOTS.lossFuel * 100} fuel points\nThe bet is deducted first; these are the total prizes.`));
+        body.append(rules);
+        const result = element('p', 'slot-result', 'Ready to spin.');
+        result.setAttribute('role', 'status');
+        body.append(result);
+        let pending = false;
+        let previous = game.state().arcade;
+        const betRow = element('label', 'slot-bet');
+        const betInput = element('input', 'modal-input');
+        Object.assign(betInput, { type: 'number', min: SLOTS.minBet, step: 1, inputMode: 'numeric', value: String(slotBet) });
+        betRow.append(element('span', '', 'Bet (coins)'), betInput);
+        const betNote = element('p', 'panel-note slot-bet-note');
+        const spinButton = button('primary wide', `Spin · ${slotBet} coins`, () => {
+          pending = game.send({ type: 'arcade_spin', bet: betInput.valueAsNumber });
+          if (!pending) toast('Reconnect before spinning.');
+          update();
+        });
+        betInput.addEventListener('input', () => {
+          const bet = betInput.valueAsNumber;
+          if (Number.isSafeInteger(bet) && bet >= SLOTS.minBet) slotBet = bet;
+          update();
+        });
+        betInput.addEventListener('keydown', event => {
+          if (event.key === 'Enter') { event.preventDefault(); if (!spinButton.disabled) spinButton.click(); }
+        });
+        foot.append(betRow, betNote, spinButton);
+        resetSlotRequest = () => { pending = false; update(); };
+        function update() {
+          if (!game.isInspecting?.()) return closePanel();
+          const { self, arcade, selfID } = game.state();
+          if (arcade !== previous) { pending = false; previous = arcade; }
+          const spinning = arcade && game.serverNow() < arcade.startedAt + SLOTS.duration;
+          const bet = betInput.valueAsNumber;
+          const valid = Number.isSafeInteger(bet) && bet >= SLOTS.minBet;
+          const affordable = bet <= self.coins;
+          const room = bet <= maxSlotBet(self.coins);
+          betInput.max = String(maxSlotBet(self.coins));
+          betInput.disabled = pending || spinning;
+          betInput.setAttribute('aria-invalid', String(!valid || !affordable || !room));
+          spinButton.disabled = pending || spinning || self.asleep || !valid || !affordable || !room;
+          spinButton.textContent = pending ? 'Waiting...' : spinning ? 'Spinning...' : valid ? `Spin · ${bet} coins` : 'Spin';
+          betNote.textContent = !valid ? `Minimum bet: ${SLOTS.minBet} whole coins.` : !affordable ? `You have ${self.coins} coins.`
+            : !room ? 'Choose a smaller bet to leave room for the prize.'
+              : `Prizes: ${bet * SLOTS.payouts.pair} / ${bet * SLOTS.payouts.triple} / ${bet * SLOTS.payouts.jackpot} coins`;
+          result.textContent = spinning ? `${arcade.by} is spinning...` : arcade
+            ? `${arcade.byID === selfID ? 'You' : arcade.by}: ${slotResultText(arcade)}` : 'Ready to spin.';
+        }
+        // Begin the camera before show() calls the first update.
+        game.inspect?.(target.object);
+        return update;
+      },
+    });
   }
 
   function vendorLine(menu) {
@@ -283,16 +351,17 @@ export function createGamePanels({ hud, game }) {
         const note = element('p', 'panel-note');
         foot.append(note);
         return () => {
-          const { self, jukebox } = game.state();
+          const { self, jukebox, band } = game.state();
+          const live = band && game.serverNow() < band.startedAt + BAND.duration * 1000;
           const status = game.audio.progress();
           playing.classList.toggle('idle', !jukebox);
           nowTitle.textContent = status ? `♪ ${status.song.title}` : 'Nothing playing';
-          nowBy.textContent = jukebox ? `Picked by ${jukebox.by}` : 'Pick a song for the room.';
+          nowBy.textContent = live ? 'Quiet while the live band plays.' : jukebox ? `Picked by ${jukebox.by}` : 'Pick a song for the room.';
           progressFill.style.width = status ? `${status.elapsed / status.song.duration * 100}%` : '0';
           stop.hidden = !jukebox;
           stop.disabled = self.asleep;
-          for (const { song, play } of rows) play.disabled = self.asleep || self.coins < song.price;
-          note.textContent = 'Anyone can stop a song; the coins are already spent.';
+          for (const { song, play } of rows) play.disabled = live || self.asleep || self.coins < song.price;
+          note.textContent = live ? 'Let the live band finish before picking another song.' : 'Anyone can stop a song; the coins are already spent.';
         };
       },
     });
@@ -348,16 +417,39 @@ export function createGamePanels({ hud, game }) {
   }
 
   function openStage() {
-    const band = NPCS.filter(npc => ['sing', 'play', 'drum'].includes(npc.activity));
-    const clock = hideoutTime(game.now());
-    const playing = band.some(npc => npcPresent(npc, clock));
+    const members = BAND.members.map(id => NPC_BY_ID.get(id));
     show({
       key: 'stage',
-      kicker: playing ? 'Live now' : `Band plays ${formatHour(band[0].from)}–${formatHour(band[0].to)}`,
+      kicker: `Band plays ${formatHour(members[0].from)}–${formatHour(members[0].to)}`,
       title: 'Stage',
-      build(body) {
-        body.append(element('p', 'panel-note', `${band.map(npc => `${npc.name} (${npc.role.toLowerCase()})`).join(', ')}.`));
-        body.append(element('p', 'panel-note', playing ? 'Grab a seat and enjoy the set.' : 'Nobody is on right now. Put something on the jukebox instead.'));
+      build(body, foot) {
+        body.append(element('p', 'panel-note', `${members.map(npc => `${npc.name} (${npc.role.toLowerCase()})`).join(', ')}.`));
+        const playing = element('div', 'now-playing');
+        const title = element('div', 'now-title');
+        const by = element('div', 'now-by');
+        const progress = element('div', 'progress');
+        const fill = element('span');
+        progress.append(fill);
+        playing.append(title, by, progress);
+        const note = element('p', 'panel-note');
+        body.append(playing, note);
+        const pay = button('primary wide', `Play live music · ${BAND.price} coins`, () => game.send({ type: 'band_play' }));
+        foot.append(pay);
+        return () => {
+          const { self, band } = game.state();
+          const elapsed = band ? Math.max(0, (game.serverNow() - band.startedAt) / 1000) : 0;
+          const live = band && elapsed < BAND.duration;
+          const present = members.every(npc => npcPresent(npc, hideoutTime(game.now())));
+          playing.classList.toggle('idle', !live);
+          title.textContent = live ? '♪ Live band is playing' : present ? 'Ready for a song' : 'The stage is quiet';
+          by.textContent = live ? `Requested by ${band.by}` : 'One song per payment.';
+          progress.hidden = !live;
+          fill.style.width = live ? `${elapsed / BAND.duration * 100}%` : '0';
+          note.textContent = live ? 'Grab a seat and enjoy the song. The band plays to the end.' : present
+            ? 'Treat the room to a live song.' : 'Nobody is on right now. Put something on the jukebox instead.';
+          pay.textContent = live ? 'Band is playing…' : `Play live music · ${BAND.price} coins`;
+          pay.disabled = live || !present || self.asleep || self.coins < BAND.price;
+        };
       },
     });
   }
@@ -395,6 +487,7 @@ export function createGamePanels({ hud, game }) {
     if (target.kind === 'item') return openItem(target.served);
     if (target.kind === 'player') return openPlayer(target.id);
     const action = target.action ?? { type: target.id };
+    if (action.type === 'arcade') return openArcade(target);
     if (action.type === 'menu') return openMenu(action.menu);
     if (action.type === 'npc') return openNpc(action.npc);
     if (action.type === 'jukebox') return openJukebox();
@@ -474,6 +567,7 @@ export function createGamePanels({ hud, game }) {
     open,
     useHovered: () => { if (hovered) open(hovered); },
     closePanel,
+    slotRejected: () => resetSlotRequest(),
     setHover,
     refresh,
     toast,

@@ -5,8 +5,9 @@ import { pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { makeSession, readSession, readSessionToken, sessionCookie, verifyInitData } from './auth.js';
 import { createAvatarLoader } from './avatars.js';
-import { MOVEMENT_BOUNDS, SPAWN_AREA } from './public/js/config.js';
-import { AMBIENCE_FILE, ITEM_BY_ID, SONGS } from './public/js/game/catalog.js';
+import { SPAWN_AREA } from './public/js/config.js';
+import { MAPS, mapFromQuery } from './public/js/maps.js';
+import { AMBIENCE_FILE, BAND, ITEM_BY_ID, SONGS } from './public/js/game/catalog.js';
 import { createGame } from './game.js';
 
 // Client walking speed (m/s): a .3 m step every 200 ms. Reported positions are checked against it.
@@ -15,13 +16,13 @@ const WALK_SPEED = 1.5;
 // A random spot in the entrance area, at least SPAWN_GAP from everyone already there (the best of
 // a few tries when it is crowded).
 const SPAWN_GAP = .9;
-export function randomSpawn(taken, random = Math.random) {
+export function randomSpawn(taken, random = Math.random, area = SPAWN_AREA) {
   let best;
   let bestGap = -1;
   for (let attempt = 0; attempt < 30; attempt++) {
     const spot = {
-      x: Math.round((SPAWN_AREA.x0 + random() * (SPAWN_AREA.x1 - SPAWN_AREA.x0)) * 100) / 100,
-      z: Math.round((SPAWN_AREA.z0 + random() * (SPAWN_AREA.z1 - SPAWN_AREA.z0)) * 100) / 100,
+      x: Math.round((area.x0 + random() * (area.x1 - area.x0)) * 100) / 100,
+      z: Math.round((area.z0 + random() * (area.z1 - area.z0)) * 100) / 100,
     };
     const gap = Math.min(Infinity, ...taken.map(other => Math.hypot(other.x - spot.x, other.z - spot.z)));
     if (gap >= SPAWN_GAP) return spot;
@@ -92,7 +93,7 @@ export function createHideoutServer(options = {}) {
   }
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
   const moveNow = options.moveNow ?? (() => performance.now());
-  const pickSpawn = options.pickSpawn ?? randomSpawn;
+  const pickSpawn = options.pickSpawn ?? ((taken, map) => randomSpawn(taken, Math.random, map.spawnArea));
   const gameNow = options.gameNow ?? (() => Date.now());
   const avatars = createAvatarLoader({ botToken, telegramAPIBase, fetchImpl, now });
   let guestNumber = 0;
@@ -180,21 +181,29 @@ export function createHideoutServer(options = {}) {
     ...[...SONGS.map(song => [song.id, song.file]), ['ambience', AMBIENCE_FILE]].map(([id, file]) => [
       `/music/${id}.mp3`, staticAsset(`./assets/music/${file}`, 'audio/mpeg', 'public, max-age=86400'),
     ]),
+    [`/music/${BAND.id}.mp3`, staticAsset(`./assets/band/${BAND.file}`, 'audio/mpeg', 'public, max-age=86400')],
     // Interface sounds: a click when something opens, a bell when a purchase goes through, and a
     // slurp or bite when someone consumes an item.
-    ...[['click', 'click(96K).mp3'], ['bell', 'soft-bell(96K).mp3'], ['slurp', 'slurp(96K).mp3'], ['bite', 'bite(96K).mp3'], ['footstep', 'footstep(96K).mp3']].map(([id, file]) => [
+    ...[['click', 'click(96K).mp3'], ['bell', 'soft-bell(96K).mp3'], ['slurp', 'slurp(96K).mp3'], ['bite', 'bite(96K).mp3'], ['footstep', 'footstep(96K).mp3'],
+      ['slot-reel', 'slot-reel(96K).mp3'], ['slot-payout', 'slot-payout(96K).mp3'], ['casino-win', 'casino-win(96K).mp3'],
+      ['trumpet-fail', 'trumpet-fail(96K).mp3']].map(([id, file]) => [
       `/sfx/${id}.mp3`, staticAsset(`./assets/sfx/${file}`, 'audio/mpeg', 'public, max-age=86400'),
     ]),
   ]);
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const path = url.pathname;
+    const map = mapFromQuery(url.searchParams.get('map'));
+    if (['/hideout', '/hideout/', '/auth', '/auth/guest'].includes(path) && !map) {
+      response.writeHead(400).end('Unknown map');
+      return;
+    }
     if (request.method === 'GET' && path === '/') {
       response.writeHead(302, { Location: '/hideout' }).end();
     } else if (request.method === 'GET' && staticAssets.has(path)) {
       const { contentType, cacheControl, body } = staticAssets.get(path);
       const headers = { 'Content-Type': contentType, 'Cache-Control': cacheControl, 'X-Content-Type-Options': 'nosniff', 'Accept-Ranges': 'bytes' };
-      const range = /^bytes=(d*)-(d*)$/.exec(request.headers.range ?? '');
+      const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range ?? '');
       if (range && (range[1] || range[2])) {
         const start = range[1] ? Number(range[1]) : Math.max(0, body.length - Number(range[2]));
         const end = range[1] && range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
@@ -209,14 +218,15 @@ export function createHideoutServer(options = {}) {
     } else if (request.method === 'GET' && /^\/avatars\/\d+$/.test(path)) {
       const guestSession = guestEnabled && readSessionToken(request.headers['x-debug-guest-token'], botToken, now());
       const session = guestSession?.guest ? guestSession : readSession(request.headers.cookie, botToken, now());
-      if (!session || (session.guest && !guestEnabled) || !players.has(String(session.id))) {
+      if (!session || (session.guest && !guestEnabled) || !findPlayer(String(session.id))) {
         response.writeHead(401, { 'Cache-Control': 'no-store' }).end('Room session required');
         return;
       }
       const id = path.slice('/avatars/'.length);
-      if (!players.get(id)?.avatarURL) { response.writeHead(404).end('Photo unavailable'); return; }
+      const player = findPlayer(id);
+      if (!player?.avatarURL) { response.writeHead(404).end('Photo unavailable'); return; }
       try {
-        const photo = await avatars.get(id, players.get(id).photoURL);
+        const photo = await avatars.get(id, player.photoURL);
         if (!photo) { response.writeHead(404, { 'Cache-Control': 'no-store' }).end('Photo unavailable'); return; }
         response.writeHead(200, {
           'Content-Type': photo.type,
@@ -265,7 +275,7 @@ export function createHideoutServer(options = {}) {
         return;
       }
       if (!member) { response.writeHead(403).end('Group membership required'); return; }
-      if (notificationURL) {
+      if (notificationURL && map.id === 'main') {
         try {
           const notice = await fetchImpl(notificationURL, {
             method: 'POST',
@@ -295,46 +305,60 @@ export function createHideoutServer(options = {}) {
     maxPayload: 8192,
     handleProtocols: protocols => protocols.has('hideout-guest') ? 'hideout-guest' : false,
   });
-  const positions = new Map();
-  const players = new Map();
-  const movementTimes = new Map();
-  const orientationTimes = new Map();
+  function createRoom(map) {
+    const positions = new Map();
+    const players = new Map();
+    const movementTimes = new Map();
+    const orientationTimes = new Map();
 
-  function broadcast(message, except) {
-    const outgoing = JSON.stringify(message);
-    for (const peer of sockets.clients) {
-      if (peer !== except && peer.readyState === WebSocket.OPEN) peer.send(outgoing);
+    function broadcast(message, except) {
+      const outgoing = JSON.stringify(message);
+      for (const peer of sockets.clients) {
+        if (peer.mapID === map.id && peer !== except && peer.readyState === WebSocket.OPEN) peer.send(outgoing);
+      }
     }
-  }
 
-  function sendTo(playerID, message) {
-    const outgoing = JSON.stringify(message);
-    for (const peer of sockets.clients) {
-      if (peer.playerID === playerID && peer.readyState === WebSocket.OPEN) peer.send(outgoing);
+    function sendTo(playerID, message) {
+      const outgoing = JSON.stringify(message);
+      for (const peer of sockets.clients) {
+        if (peer.mapID === map.id && peer.playerID === playerID && peer.readyState === WebSocket.OPEN) peer.send(outgoing);
+      }
     }
-  }
 
-  const game = createGame({
-    now: gameNow,
-    send: sendTo,
-    broadcast,
-    getPosition: id => players.get(id),
-    setPosition(id, x, z) {
-      const player = players.get(id);
-      const position = [...positions.entries()].find(([key]) => String(key) === id)?.[1];
-      for (const target of [player, position]) if (target) Object.assign(target, { x, z });
-    },
-    getName: id => players.get(id)?.name ?? 'Someone',
-  });
-  const gameTimer = setInterval(game.tick, 5000);
+    const game = createGame({
+      mapID: map.id,
+      now: gameNow,
+      send: sendTo,
+      broadcast,
+      getPosition: id => players.get(id),
+      setPosition(id, x, z) {
+        const player = players.get(id);
+        const position = positions.get(Number(id));
+        for (const target of [player, position]) if (target) Object.assign(target, { x, z });
+      },
+      getName: id => players.get(id)?.name ?? 'Someone',
+    });
+    return { positions, players, movementTimes, orientationTimes, game, broadcast };
+  }
+  const rooms = new Map(Object.values(MAPS).map(map => [map.id, createRoom(map)]));
+  function findPlayer(id) {
+    for (const room of rooms.values()) {
+      if (room.players.has(id)) return room.players.get(id);
+    }
+    return null;
+  }
+  const gameTimer = setInterval(() => { for (const room of rooms.values()) room.game.tick(); }, 5000);
   gameTimer.unref();
   server.on('close', () => clearInterval(gameTimer));
 
   server.on('upgrade', async (request, socket, head) => {
-    if (new URL(request.url, 'http://localhost').pathname !== '/ws') {
+    const url = new URL(request.url, 'http://localhost');
+    if (url.pathname !== '/ws') {
       rejectUpgrade(socket, 404, 'Not Found');
       return;
     }
+    const map = mapFromQuery(url.searchParams.get('map'));
+    if (!map) { rejectUpgrade(socket, 400, 'Unknown map'); return; }
     if (!sameOrigin(request)) { rejectUpgrade(socket, 401, 'Unauthorized'); return; }
     const protocols = (request.headers['sec-websocket-protocol'] || '').split(',').map(protocol => protocol.trim()).filter(Boolean);
     const guestToken = protocols.find(protocol => protocol.startsWith('guest.'))?.slice(6);
@@ -355,14 +379,17 @@ export function createHideoutServer(options = {}) {
       }
     }
     sockets.handleUpgrade(request, socket, head, client => {
-      sockets.emit('connection', client, session);
+      sockets.emit('connection', client, session, map);
     });
   });
 
-  sockets.on('connection', (client, session) => {
+  sockets.on('connection', (client, session, map) => {
+    const { positions, players, movementTimes, orientationTimes, game, broadcast } = rooms.get(map.id);
+    const MOVEMENT_BOUNDS = map.bounds;
+    client.mapID = map.id;
     client.on('error', error => console.error('WebSocket:', error.message));
     const playerID = String(session.id);
-    const position = positions.get(session.id) ?? pickSpawn([...players.values()]);
+    const position = positions.get(session.id) ?? pickSpawn([...players.values()], map);
     position.yaw ??= 0;
     position.pitch ??= -.12;
     positions.set(session.id, position);
@@ -393,13 +420,13 @@ export function createHideoutServer(options = {}) {
       clearTimeout(expiration);
       clearInterval(membership);
       const stillConnected = [...sockets.clients].some(peer =>
-        peer !== client && peer.readyState === WebSocket.OPEN && peer.playerID === playerID);
+        peer.mapID === map.id && peer !== client && peer.readyState === WebSocket.OPEN && peer.playerID === playerID);
       if (!stillConnected) {
         players.delete(playerID);
         game.leave(playerID);
         movementTimes.delete(playerID);
         orientationTimes.delete(playerID);
-        avatars.remove(playerID);
+        if (!findPlayer(playerID)) avatars.remove(playerID);
         broadcast({ type: 'player_left', id: playerID });
       }
     });

@@ -20,6 +20,7 @@ export function buildLighting({ THREE, scene, level }) {
     [0xf06ad0, 5, 4.3, 2.4, 3.9], // stage
   ]) {
     const light = new THREE.PointLight(color, intensity, 7, 2);
+    if (color === 0xf06ad0) light.name = 'StageWashLight';
     light.position.set(x, y, z);
     level.add(light);
   }

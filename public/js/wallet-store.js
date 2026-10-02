@@ -2,16 +2,16 @@
 // truth; after a server restart it accepts this copy once (see game.js restore). Inside Telegram
 // the copy lives in Telegram CloudStorage (per user, survives reinstalls and follows the account
 // across devices); elsewhere, and as a fallback, in localStorage.
-const CLOUD_KEY = 'hideout_wallet';
 const SAVE_DELAY_MS = 2000;
 
-export function createWalletStore() {
+export function createWalletStore(mapID = 'main') {
+  const CLOUD_KEY = mapID === 'main' ? 'hideout_wallet' : `hideout_wallet_${mapID}`;
   const telegram = window.Telegram?.WebApp;
   const cloud = telegram?.initData && telegram.isVersionAtLeast?.('6.9') ? telegram.CloudStorage : null;
   let pending;
   let timer;
 
-  const localKey = playerID => `hideout.wallet.${playerID}`;
+  const localKey = playerID => mapID === 'main' ? `hideout.wallet.${playerID}` : `hideout.wallet.${mapID}.${playerID}`;
   const parse = text => {
     try {
       const value = JSON.parse(text || 'null');

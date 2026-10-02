@@ -52,6 +52,11 @@ test('entry notifications use verified login names, exclude rejected logins and 
   assert.equal(guest.status, 200);
   assert.equal(notices.length, 0);
   const signed = loginData({ id: 1, first_name: 'Michael', username: 'hermanmichael' });
+  assert.equal((await fetch(`${origin}/auth?map=prototype`, {
+    method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: signed }),
+  })).status, 200);
+  assert.equal(notices.length, 0);
   for (let i = 0; i < 2; i++) assert.equal((await auth(signed)).status, 200);
   failure = true;
   const response = await auth(loginData({ id: 2, first_name: 'Alice' }));

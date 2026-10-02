@@ -1,11 +1,12 @@
 import {
-  DAILY_COINS, ITEM_BY_ID, isDrink, ITEM_LIFETIME_MS, JUKEBOX, MAX_COINS, MENUS, SONG_BY_ID, SPOTS, STARTING_COINS,
+  BAND, DAILY_COINS, ITEM_BY_ID, isDrink, ITEM_LIFETIME_MS, JUKEBOX, MAX_COINS, MENUS, SONG_BY_ID, SPOTS, STARTING_COINS,
   itemAvailable,
 } from './public/js/game/catalog.js';
 import { hideoutTime } from './public/js/game/clock.js';
 import { npcPresent, NPC_BY_ID } from './public/js/game/npcs.js';
 import { FRESH_VITALS, applyEffects, hourlyTick, isAsleep, splashAwake } from './public/js/game/rules.js';
 import { SEAT_BY_ID } from './public/js/game/seats.js';
+import { SLOTS, maxSlotBet, rollSlots } from './public/js/game/slots.js';
 
 // Server-side reach is looser than the client's 3 m crosshair rule, to absorb position lag.
 const USE_REACH = 4;
@@ -16,12 +17,15 @@ const JUKEBOX_GRACE_MS = 3000;
 // sockets; server.js supplies `send` (to every socket of one player), `broadcast` and positions.
 // Wallets live in memory. After a restart, a returning player's first `restore` message (their
 // localStorage copy) is accepted once, before they spend anything.
-export function createGame({ now = () => Date.now(), send, broadcast, getPosition, setPosition = () => {}, getName }) {
+export function createGame({ now = () => Date.now(), send, broadcast, getPosition, setPosition = () => {}, getName, mapID = 'main', random = Math.random }) {
   const wallets = new Map();
   const online = new Set();
   const items = new Map();
   let nextItemID = 0;
   let jukebox = null;
+  let band = null;
+  let arcade = null;
+  let nextSpinID = 0;
   const seated = new Map(); // playerID -> seat id
 
   const notice = (playerID, text, tone = 'error') => send(playerID, { type: 'notice', text, tone });
@@ -29,10 +33,16 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     const position = getPosition(playerID);
     return Boolean(position) && Math.hypot(position.x - x, position.z - z) <= reach;
   };
-  const selfState = wallet => ({
-    type: 'self', coins: wallet.coins, drunk: wallet.drunk, fuel: wallet.fuel, asleep: isAsleep(wallet),
-    dayKey: wallet.dayKey,
-  });
+  const selfState = wallet => {
+    const state = {
+      type: 'self', coins: wallet.coins, drunk: wallet.drunk, fuel: wallet.fuel, asleep: isAsleep(wallet),
+      dayKey: wallet.dayKey,
+    };
+    if (wallet.pendingSlotPayout && now() < wallet.pendingSlotPayout.revealAt) {
+      state.pendingSlotPayout = wallet.pendingSlotPayout;
+    }
+    return state;
+  };
 
   function startDay(wallet, time) {
     wallet.coins = Math.min(MAX_COINS, wallet.coins + DAILY_COINS);
@@ -72,6 +82,8 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
       self: selfState(wallet),
       items: [...items.values()],
       jukebox,
+      band,
+      arcade,
       sleepers: [...online].filter(id => isAsleep(walletFor(id))),
       seated: Object.fromEntries(seated),
     };
@@ -194,6 +206,7 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     const wallet = walletFor(playerID);
     if (isAsleep(wallet)) return notice(playerID, 'You are passed out.');
     if (!near(playerID, JUKEBOX.x, JUKEBOX.z, JUKEBOX.reach)) return notice(playerID, 'Walk up to the jukebox.');
+    if (band && now() < band.startedAt + BAND.duration * 1000) return notice(playerID, 'Let the live band finish first.');
     if (wallet.coins < song.price) return notice(playerID, `Not enough coins for ${song.title}.`);
     update(playerID, wallet => { wallet.coins -= song.price; });
     jukebox = { song: song.id, startedAt: now(), byID: playerID, by: getName(playerID) };
@@ -211,6 +224,40 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     broadcast({ type: 'activity', text: `${getName(playerID)} stopped ♪ ${song.title}` });
   }
 
+  function playBand(playerID) {
+    const wallet = walletFor(playerID);
+    if (isAsleep(wallet)) return notice(playerID, 'You are passed out.');
+    if (!near(playerID, BAND.x, BAND.z, BAND.reach)) return notice(playerID, 'Walk up to the stage.');
+    if (band && now() < band.startedAt + BAND.duration * 1000) return notice(playerID, 'Let the live band finish first.');
+    if (!BAND.members.every(id => npcPresent(id, hideoutTime(now())))) return notice(playerID, 'The band is off shift. Come back later.');
+    if (wallet.coins < BAND.price) return notice(playerID, `You need ${BAND.price} coins for live music.`);
+    band = { startedAt: now(), byID: playerID, by: getName(playerID) };
+    update(playerID, wallet => { wallet.coins -= BAND.price; });
+    broadcast({ type: 'band', band });
+    broadcast({ type: 'activity', text: `${band.by} paid for a live song ♪` });
+  }
+
+  function spinSlots(playerID, bet = SLOTS.minBet) {
+    if (mapID !== SLOTS.map) return notice(playerID, 'This machine is not in this map.');
+    const wallet = walletFor(playerID);
+    if (isAsleep(wallet)) return notice(playerID, 'You are passed out.');
+    if (!near(playerID, SLOTS.x, SLOTS.z, USE_REACH)) return notice(playerID, 'Walk up to Gossip Jackpot.');
+    if (arcade && now() < arcade.startedAt + SLOTS.duration) return notice(playerID, 'The machine is still spinning.');
+    if (!Number.isSafeInteger(bet) || bet < SLOTS.minBet) return notice(playerID, `Bet at least ${SLOTS.minBet} whole coins.`);
+    if (wallet.coins < bet) return notice(playerID, `You need ${bet} coins for that bet.`);
+    if (bet > maxSlotBet(wallet.coins)) return notice(playerID, 'Choose a smaller bet to leave room for the prize.');
+    arcade = { ...rollSlots(bet, random), bet, id: ++nextSpinID, byID: playerID, by: getName(playerID), startedAt: now() };
+    // Settle once on the server, even if the player disconnects during the reel animation.
+    update(playerID, wallet => {
+      wallet.coins = wallet.coins - bet + arcade.payout;
+      // Include the reveal time in the wallet update, which arrives before the reel event.
+      wallet.pendingSlotPayout = arcade.payout > 0
+        ? { amount: arcade.payout, revealAt: arcade.startedAt + SLOTS.duration } : null;
+      if (arcade.kind === 'loss') Object.assign(wallet, applyEffects(wallet, { fuel: -SLOTS.lossFuel }));
+    });
+    broadcast({ type: 'arcade_spin', spin: arcade });
+  }
+
   function transfer(playerID, to, amount) {
     to = String(to);
     if (to === playerID || !online.has(to)) return notice(playerID, 'That player is not here.');
@@ -218,7 +265,7 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     const wallet = walletFor(playerID);
     if (wallet.coins < amount) return notice(playerID, 'You do not have that many coins.');
     const receiver = walletFor(to);
-    if (receiver.coins + amount > MAX_COINS) return notice(playerID, 'Their wallet is full.');
+    if (amount > MAX_COINS - receiver.coins) return notice(playerID, 'Their wallet is full.');
     update(playerID, wallet => { wallet.coins -= amount; });
     update(to, wallet => { wallet.coins += amount; });
     notice(playerID, `Sent ${amount} 🪙 to ${getName(to)}.`, 'ok');
@@ -240,12 +287,19 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
 
   // Handles one parsed client message. Returns false for message types this module does not own.
   function handle(playerID, message) {
+    // Main-room fixtures do not exist in the prototype room.
+    if (mapID !== 'main' && ['buy', 'jukebox_play', 'jukebox_stop', 'band_play', 'sit'].includes(message?.type)) {
+      notice(playerID, 'This fixture is not in this map.');
+      return true;
+    }
     switch (message?.type) {
       case 'restore': restore(playerID, message); break;
       case 'buy': if (typeof message.item === 'string') buy(playerID, message.item); break;
       case 'consume': if (typeof message.id === 'string') consume(playerID, message.id); break;
       case 'jukebox_play': if (typeof message.song === 'string') playSong(playerID, message.song); break;
       case 'jukebox_stop': stopSong(playerID); break;
+      case 'band_play': playBand(playerID); break;
+      case 'arcade_spin': spinSlots(playerID, message.bet); break;
       case 'transfer': if (typeof message.to === 'string') transfer(playerID, message.to, message.amount); break;
       case 'splash': if (typeof message.id === 'string') splash(playerID, message.id); break;
       case 'sit': if (typeof message.seat === 'string') sit(playerID, message.seat); break;
@@ -277,6 +331,10 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     if (jukebox && now() - jukebox.startedAt > SONG_BY_ID.get(jukebox.song).duration * 1000 + JUKEBOX_GRACE_MS) {
       jukebox = null;
       broadcast({ type: 'jukebox', jukebox });
+    }
+    if (band && now() >= band.startedAt + BAND.duration * 1000) {
+      band = null;
+      broadcast({ type: 'band', band });
     }
   }
 

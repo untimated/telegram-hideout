@@ -5,8 +5,5 @@ export function buildStageArea({ models, place, interactable }) {
   place(models.StageSteps(1.6, 3), 1.9, 0, 4.6, Math.PI / 2);
   place(models.StageSpeaker(), 3, .4, 5.6);
   place(models.StageSpeaker(), 5.6, .4, 5.6);
-  const micStand = place(models.MicrophoneStand(), 4.3, .4, 4.4);
-  const microphone = models.Microphone();
-  microphone.position.set(.28, 1.25, 0);
-  micStand.add(microphone);
+  // Samantha's model carries the microphone in her animated hand.
 }

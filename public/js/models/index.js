@@ -6,6 +6,8 @@ import { createFurnitureModels } from './furniture.js';
 import { createDecorModels } from './decor.js';
 import { createRoofModels } from './roof.js';
 import { createPalmModels } from './palms.js';
+import { createSlotMachineModel } from './slot-machine.js';
+import { createFemaleRobotModel } from './female-robot.js';
 
 export function createModelKit(THREE, { Robot } = {}) {
   const tools = createProceduralTools(THREE);
@@ -18,6 +20,8 @@ export function createModelKit(THREE, { Robot } = {}) {
     ...createDecorModels(tools, architecture),
     ...createRoofModels(tools),
     ...createPalmModels(tools),
+    SlotMachine: () => createSlotMachineModel(tools),
+    FemaleRobot: () => createFemaleRobotModel(THREE),
     materials: tools.materials,
     ...(Robot ? { Robot } : {}),
   });

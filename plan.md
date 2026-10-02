@@ -54,7 +54,7 @@ or ocasionally give them static round patrol movement
 - Samantha, Stanley the organist and Harvey the percussionist 
   Time     : 5PM-11PM
   Position : Stage
-  Activity : staring at the pool 
+  Activity : Playing At the stage
 - Wolfred the bartender
   Time     : 9am to 12pm
   Position : Bar
@@ -107,6 +107,30 @@ Jukebox :
 - Determined Vaporwave By Catch22Music  - 10 coin
 - Exploring Vaporwave By Catch22Music   - 10 coin:w
  
+News Stand :
+- pick weird news like discovery channel, natgeo, popular science, or some weird sub culture
+- if possible render it in a news paper like background, and use new paper like formatting(css)
+- I saw readers digest got wide variety of casual news, maybe if they got rss we can pull and transform the news.
+- hardcoded/handpicked content also works, we dont need any parser to pull off from rss, but must be decided how we updated the content.
+
+Band:
+unlike Jukebox, we cannot see what is being played, we just pay the stage 15 coin for them to sing one music (check assets/band/)
+- one full song per payment, at default volume; cannot stop or restart until the song finishes
+
+Arcade:
+   Slots :
+      - cost : min 7 coin, up to unlimited
+      - win rate : 20% for two symbol, 10% for three symbol, and 5% for jackpot
+      - payout :
+          + 2 same symbol (except jackpot) + 1 = 3x Base
+          + 3 same symbol (except jackpot)     = 6x Base
+          + Jackpot                            = 12x Base
+      - for every lost, subtract fuel by -2
+
+
+Leaderboard
+  Top Spender among members
+
 
 # Mood / State
 Consuming something, or doing something induces effects scale from 0 to 1
@@ -120,3 +144,12 @@ for now we just do two things
   on energy == 0.0 -> do sleep pose, cannot move from the floor
   every hour active (exact at 1,2,3..) -> reduce energy by 0.1 
   (if has_not_login_today && now > 1am) -> restore energy to 1.0
+
+# Backlog
+
+- [ ] **Spatial 3D sound for music** — Use the browser Web Audio API / Three.js
+  `PositionalAudio` for the jukebox and live band. Place sound sources at the jukebox
+  and stage, with the listener following the camera's position and orientation.
+  Add directional sound and distance falloff while preserving shared playback timing,
+  reconnect seeking, the band's payment/playback lock, mute, and existing volume controls.
+  Keep regular audio playback as a fallback if spatial audio is unavailable.

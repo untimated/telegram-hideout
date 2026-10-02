@@ -12,6 +12,48 @@ through the BotFather Mini App link. A plain browser URL cannot authenticate.
 
 Run `pnpm test` for the HTTP and two-client relay check.
 
+Use `/hideout?map=prototype` for the development room. `/hideout` (or
+`/hideout?map=main`) opens Gossip Bar. The prototype is a flat development
+room with a metre grid; add experimental props in `public/js/stage/prototype.js`
+and move approved builders into the main stage later. Both maps use the same
+Telegram login, membership checks, chat and movement controls, but have separate
+players, chat, positions, game state and saved wallets. Prototype logins do not
+send entry notifications to the Telegram group. Unknown map names return 400.
+No extra endpoint deployment or environment variables are needed. Gossip Jackpot
+is in the original bar beside the jukebox, against the pool glass. Tap it
+(or aim and press E) to open the close-up, bet field and Spin button. Bet any
+whole number of coins from 7 up to
+your balance. Exclusive outcomes are a 20% chance of exactly two matching
+regular symbols (3 times the bet), 10% of three matching regular symbols
+(6 times the bet), 5% of three GOSSIP BAR symbols (12 times the bet), and 65%
+of no match (0 coins). Payouts are total awards after charging the bet,
+not extra profit; the expected return is 1.8 times the bet. A losing spin also
+costs 2 percentage points of fuel (1.00 becomes .98); fuel stays between 0 and 1,
+and reaching 0 uses the existing passed-out behavior. Wallets in both rooms
+can grow beyond 100,000 coins; whole-coin amounts and every possible payout must
+remain safe JavaScript integers. The server chooses the symbols and settles
+the wallet once, immediately, so disconnecting cannot
+cancel a paid spin. The HUD deducts the bet immediately and adds the secured
+prize when the final reel stops, including when reconnecting during a spin.
+The saved wallet keeps the full secured balance. All bar players see the
+same animated result; the machine accepts one spin every 3.2 seconds. Moving,
+dragging, closing the panel, or pressing Escape returns to first person. The
+prototype room is empty again.
+The reel recording starts 2.34 seconds into the file, just before the lever
+attack, and stops when the last reel
+lands. Winning results play the casino-win cue and coin-payout sound together;
+losses play the trumpet-fail cue at the reel stop. These sounds fade with
+distance and follow the sound mute button. Reconnecting resumes an active reel
+sound without replaying old result cues.
+Wins also flash the cabinet trim and burst into tumbling gold coins and rising
+sparkles. Pair wins have a small burst, triples a larger one, and jackpots the
+largest. Decorations use two reusable mesh batches and do not intercept clicks.
+
+For browser testing with debug guest access enabled, use
+`/hideout?map=prototype&guest=1`. Map bounds and spawn areas are defined in
+`public/js/maps.js` and shared by client and server. Main-room food, seats and
+jukebox and live band actions are unavailable in the empty prototype room.
+
 To announce each successful Telegram login in the group, configure the sibling
 TelegramBot service with `HIDEOUT_NOTIFICATION_CHAT_ID` (one negative group ID)
 and `HIDEOUT_NOTIFICATION_SECRET` (a random shared secret). If the bot uses
@@ -131,6 +173,11 @@ light and an "E · …" hint, and E or a tap opens its panel (taps from further 
 - **Chalkboard easels** by the bar and the kitchen show the weekday specials.
 - **Jukebox**: pay 10 coins to play a song for the whole room, synced by start time; anyone can
   stop it. Volume falls off with distance, and the bar ambience loops underneath.
+- **Live band**: tap the stage during the band's 17:00–23:00 shift and pay 15 coins for one
+  performance of the track in `assets/band/`. It plays once at fixed default volume, without
+  stop or restart controls. Everyone shares the same start time, including reconnects; another
+  payment is accepted only after the song ends. Live music quiets the jukebox and blocks new
+  jukebox purchases until the set finishes. The global sound toggle still mutes locally.
 - **Seats**: bar stools, café chairs, the fountain cubes and the sofas (`game/seats.js`). Tap one to
   sit (one player per seat; Plain Joe keeps his chair during his shift); walking stands you up.
 - **Other players**: send coins, or splash water on someone who passed out.
@@ -155,8 +202,8 @@ Where the pieces live:
 - Menu pictures are optional: `assets/menu-icons/<item id>.webp` (or .png) replaces the emoji.
 
 Socket messages on top of move/orientation/chat: the client sends `buy`, `consume`,
-`jukebox_play`, `jukebox_stop`, `transfer`, `splash` and `restore`; the server sends `self` (your
-coins and mood), `item_added`, `item_removed`, `jukebox`, `player_state` (asleep), `notice`
+`jukebox_play`, `jukebox_stop`, `band_play`, `transfer`, `splash` and `restore`; the server sends `self` (your
+coins and mood), `item_added`, `item_removed`, `jukebox`, `band`, `player_state` (asleep), `notice`
 (to one player) and `activity` (a line in everyone's chat log). `welcome` carries a `game`
 snapshot.
 

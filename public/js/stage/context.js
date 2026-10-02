@@ -3,7 +3,7 @@ import { createModelKit } from '../models/index.js';
 // Everything a stage module needs: the model kit, the level group, placement helpers, and the
 // registries other systems read (interactables to click on, per-frame animators).
 // `now()` is the shared clock in ms (server-corrected), used for NPC shifts and specials.
-export function createStageContext(THREE, scene, { Robot, floorEnvironment, now = () => Date.now() } = {}) {
+export function createStageContext(THREE, scene, { Robot, floorEnvironment, now = () => Date.now(), isBandPlaying = () => false } = {}) {
   const models = createModelKit(THREE, { Robot });
   if (floorEnvironment) {
     models.materials.floor.envMap = floorEnvironment;
@@ -56,5 +56,5 @@ export function createStageContext(THREE, scene, { Robot, floorEnvironment, now 
   const animators = [];
   level.userData.animate = time => { for (const animate of animators) animate(time); };
 
-  return { THREE, scene, models, level, place, unlit, interactable, seatable, animators, now };
+  return { THREE, scene, models, level, place, unlit, interactable, seatable, animators, now, isBandPlaying };
 }

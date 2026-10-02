@@ -3,7 +3,8 @@
 
 export const DAILY_COINS = 100;
 export const STARTING_COINS = 100;
-export const MAX_COINS = 100_000;
+// Slot prizes can grow a wallet without a gameplay ceiling, while coins stay exact integers.
+export const MAX_COINS = Number.MAX_SAFE_INTEGER;
 
 // Where a menu is used from. Players must stand within `reach` metres of (x, z) to order;
 // `vendor` is the NPC who must be on shift; served items land on the `spots` group.
@@ -72,6 +73,13 @@ export const SONGS = Object.freeze([
 ]);
 export const SONG_BY_ID = new Map(SONGS.map(song => [song.id, song]));
 export const AMBIENCE_FILE = 'bar-amb (96K).mp3';
+
+// One paid live performance, shared by everyone in Gossip Bar. Duration is in seconds.
+export const BAND = Object.freeze({
+  id: 'band-calypso', file: 'The Undynamic Pop Experiment - Calypso (96K).mp3',
+  price: 15, duration: 228.937143,
+  x: 4.3, z: 4.6, reach: 4.5, members: ['samantha', 'stanley', 'harvey'],
+});
 
 // Served items sit on these surfaces until someone consumes them (y is the surface height).
 export const SPOTS = Object.freeze({

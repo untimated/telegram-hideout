@@ -1,5 +1,6 @@
 import { CHARACTER_SCALE } from './config.js';
 import { addRobotDetails } from './models/robot-details.js';
+import { createFemaleRobotModel } from './models/female-robot.js';
 export function createRobotCharacterFactory(THREE, scene, { guestMode, getGuestSessionToken, addDebug }) {
   const characterPalette = ['#e97858', '#4f8fd8', '#48a88e', '#a06bd2', '#dfa63f', '#d95f91', '#4ba9b8', '#8ba84c'];
 
@@ -129,15 +130,8 @@ export function createRobotCharacterFactory(THREE, scene, { guestMode, getGuestS
     return texture;
   }
 
-  function createRobotCharacter(player, { isNPC = false } = {}) {
+  function createRobotBody(player) {
     const group = new THREE.Group();
-    group.scale.setScalar(CHARACTER_SCALE);
-    group.position.set(player.x, 0, player.z);
-    group.rotation.y = Number.isFinite(player.yaw) ? player.yaw : 0;
-    group.userData.target = new THREE.Vector3(player.x, 0, player.z);
-    group.userData.kind = isNPC ? 'npc' : 'player';
-    group.userData.walkPhase = 0;
-    group.userData.walkUntil = 0;
 
     const accentColor = colorFor(player.id);
     const shell = new THREE.MeshStandardMaterial({ color: accentColor, roughness: .38, metalness: .28 });
@@ -283,24 +277,38 @@ export function createRobotCharacterFactory(THREE, scene, { guestMode, getGuestS
       return forearm;
     });
 
+    return group;
+  }
+
+  function createRobotCharacter(player, { isNPC = false, model = 'robot' } = {}) {
+    const group = model === 'female' ? createFemaleRobotModel(THREE) : createRobotBody(player);
+    group.scale.setScalar(CHARACTER_SCALE);
+    group.position.set(player.x, 0, player.z);
+    group.rotation.y = Number.isFinite(player.yaw) ? player.yaw : 0;
+    group.userData.target = new THREE.Vector3(player.x, 0, player.z);
+    group.userData.kind = isNPC ? 'npc' : 'player';
+    group.userData.walkPhase = 0;
+    group.userData.walkUntil = 0;
+    const labelLift = model === 'female' ? .22 : 0;
+
     const avatar = new THREE.Sprite(new THREE.SpriteMaterial({
       map: avatarTexture(player),
       transparent: true,
       alphaTest: .02,
     }));
-    avatar.position.y = 1.87;
+    avatar.position.y = 1.87 + labelLift;
     avatar.scale.set(.44, .44, 1);
     group.add(avatar);
     group.userData.avatar = avatar;
     group.userData.avatarKey = `${player.avatarURL ?? ''}|${player.photoURL ?? ''}`;
 
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(player.name), transparent: true }));
-    label.position.y = 2.16;
+    label.position.y = 2.16 + labelLift;
     label.scale.set(1.18, .23, 1);
     group.add(label);
-      scene.add(group);
-      return group;
-    }
+    scene.add(group);
+    return group;
+  }
 
   function refreshAvatar(group, player) {
     const avatarKey = `${player.avatarURL ?? ''}|${player.photoURL ?? ''}`;

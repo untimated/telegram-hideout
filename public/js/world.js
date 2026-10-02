@@ -1,6 +1,8 @@
 import { createRobotCharacterFactory } from './characters.js';
 import { buildGossipBarStage } from './stage.js';
-import { DEFAULT_SPAWN, CHARACTER_SCALE, EYE_HEIGHT } from './config.js';
+import { buildPrototypeStage } from './stage/prototype.js';
+import { CHARACTER_SCALE, EYE_HEIGHT } from './config.js';
+import { MAPS } from './maps.js';
 import { createNightSky, createGlossEnvironment } from './sky.js';
 import { createServedItems } from './items.js';
 import { createPicker, createRimHighlight, INTERACT_RANGE } from './interaction.js';
@@ -10,6 +12,8 @@ import { blurAmount } from './game/rules.js';
 import { floorHeightAt } from './stage/layout.js';
 import { createJukeboxNotes } from './models/music-notes.js';
 import { createConsumptionAnimator } from './character-consumption.js';
+import { createSlotAnimator } from './slot-animation.js';
+import { createSlotWinEffects } from './models/slot-win-effects.js';
 
 const TAP_SLOP = 8;
 const TAP_MS = 450;
@@ -23,7 +27,7 @@ const SHOWCASE_SECONDS = 3.2;
 
 // onPick(target) fires for a tap/click on the scene (target is null for empty space); onHover(target)
 // reports what the reticle points at, a few times a second. getSelfState() -> { asleep, drunk }.
-export async function createWorld({ host, input, players, getSelfID, getOrientation, onLook, isLocallyMoving, getMovement, applyMove, walkSpeed, bubbles, addDebug, guestMode, getGuestSessionToken, queueOrientation, onPick, onHover, getSelfState, now, isJukeboxPlaying, onStats, onProgress }) {
+export async function createWorld({ host, input, players, getSelfID, getOrientation, onLook, isLocallyMoving, getMovement, applyMove, walkSpeed, bubbles, addDebug, guestMode, getGuestSessionToken, queueOrientation, onPick, onHover, getSelfState, now, slotNow = now, isJukeboxPlaying, isBandPlaying, onStats, onProgress, map = MAPS.main }) {
   // Reports a loading step, then yields a frame so the loading screen can repaint before the next
   // blocking step.
   const progress = async (text, fraction) => {
@@ -39,7 +43,7 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
     scene.fog = new THREE.Fog(0x171d33, 11, 24);
     const eyeHeight = EYE_HEIGHT;
     const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 130);
-    camera.position.set(DEFAULT_SPAWN.x, eyeHeight, DEFAULT_SPAWN.z);
+    camera.position.set(map.spawn.x, eyeHeight, map.spawn.z);
     camera.rotation.order = 'YXZ';
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -99,11 +103,16 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
 
     const characterFactory = createRobotCharacterFactory(THREE, scene, { guestMode, getGuestSessionToken, addDebug });
     const createRobotCharacter = characterFactory.create;
-    await progress('Building the Gossip Bar', .25);
-    const stage = buildGossipBarStage(THREE, scene, { Robot: createRobotCharacter, floorEnvironment: createGlossEnvironment(THREE, renderer), now });
+    await progress(`Building ${map.label}`, .25);
+    const buildStage = map.id === 'prototype' ? buildPrototypeStage : buildGossipBarStage;
+    const stage = buildStage(THREE, scene, { Robot: createRobotCharacter, floorEnvironment: createGlossEnvironment(THREE, renderer), now, isBandPlaying });
     const musicNotes = createJukeboxNotes(THREE);
     musicNotes.object.userData.dynamic = true;
     stage.userData.interactables.find(entry => entry.id === 'jukebox')?.object.add(musicNotes.object);
+    const slotMachine = stage.userData.interactables.find(entry => entry.id === 'gossip-jackpot')?.object;
+    const slotWinEffects = slotMachine ? createSlotWinEffects(THREE) : null;
+    if (slotWinEffects) slotMachine.add(slotWinEffects.object);
+    const slotAnimator = createSlotAnimator(slotMachine, slotWinEffects);
     const servedGroup = new THREE.Group();
     servedGroup.name = 'ServedItems';
     stage.add(servedGroup);
@@ -238,6 +247,24 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       },
       addNPC,
       items: servedItems,
+      // A short model inspection using the same camera as served-item showcases.
+      inspect(object, duration = 6) {
+        const anchors = object.userData.slotMachine;
+        if (!anchors) return;
+        object.updateWorldMatrix(true, true);
+        showcase = {
+          object, start: clock.elapsedTime, duration,
+          focus: anchors.cameraFocus.getWorldPosition(new THREE.Vector3()),
+          viewpoint: anchors.cameraPosition.getWorldPosition(new THREE.Vector3()),
+        };
+        object.userData.showcased = true;
+        rim.set(null);
+        onHover?.(null);
+        host.classList.add('showcase');
+      },
+      endInspect: endShowcase,
+      isInspecting: () => Boolean(showcase?.focus),
+      setSlotSpin: (spin, time) => slotAnimator?.setSpin(spin, time),
       consume(id, itemID) {
         consumption.start(actors.get(id), itemID, clock.elapsedTime);
       },
@@ -287,7 +314,8 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       stage.userData.animate?.(clock.elapsedTime);
       servedItems.animate(clock.elapsedTime, delta);
       rim.animate(clock.elapsedTime);
-      musicNotes.update(clock.elapsedTime, isJukeboxPlaying?.());
+      musicNotes.update(clock.elapsedTime, !isBandPlaying?.() && isJukeboxPlaying?.());
+      slotAnimator?.update(slotNow());
       const selfState = getSelfState?.() ?? { asleep: false, drunk: 0 };
       const orientation = getOrientation();
       const selfID = getSelfID();
@@ -328,7 +356,7 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
         consumption.update(group, clock.elapsedTime, asleep);
         group.rotation.order = 'YXZ';
         group.rotation.x = asleep ? -Math.PI / 2 : 0;
-        group.position.y = floorHeightAt(group.position.x, group.position.z) + (asleep ? .16 : 0);
+        group.position.y = (map.id === 'main' ? floorHeightAt(group.position.x, group.position.z) : 0) + (asleep ? .16 : 0);
         if (asleep) for (const limb of [...group.userData.arms, ...group.userData.legs]) limb.rotation.x = 0;
         // Seated: hips on the cushion, thighs forward (dangling a little on bar stools), hands on
         // the lap. The local player keeps free look; others face the way the seat faces.
@@ -370,8 +398,8 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       if (onHover && time >= nextHover) {
         nextHover = time + .2;
         const target = picker.pickCenter();
-        rim.set(target && target.distance <= INTERACT_RANGE && !selfState.asleep ? target.object : null);
-        onHover(target);
+        rim.set(target && !showcase?.focus && target.distance <= INTERACT_RANGE && !selfState.asleep ? target.object : null);
+        onHover(showcase?.focus ? null : target);
       }
       for (const [id, bubble] of bubbles) {
         const group = actors.get(id);
@@ -392,16 +420,21 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
         bubble.element.style.zIndex = String(Math.round(1000 + bubbleView.z * 10));
       }
       let view = camera;
-      if (showcase && (!showcase.object.parent || isLocallyMoving() || clock.elapsedTime - showcase.start > SHOWCASE_SECONDS)) endShowcase();
+      if (showcase && (!showcase.object.parent || isLocallyMoving() || clock.elapsedTime - showcase.start > (showcase.duration ?? SHOWCASE_SECONDS))) endShowcase();
       if (showcase) {
-        // Dolly in along a slow orbit, starting from the player's side of the item.
-        const age = clock.elapsedTime - showcase.start;
-        const ease = 1 - (1 - Math.min(1, age / 1.2)) ** 3;
-        const angle = showcase.from + age * .45;
-        const radius = .95 - .42 * ease;
-        const { position } = showcase.object;
-        showcaseCamera.position.set(position.x + Math.sin(angle) * radius, position.y + .42 - .1 * ease, position.z + Math.cos(angle) * radius);
-        showcaseCamera.lookAt(position.x, position.y + .08, position.z);
+        if (showcase.focus) {
+          showcaseCamera.position.copy(showcase.viewpoint);
+          showcaseCamera.lookAt(showcase.focus);
+        } else {
+          // Dolly in along a slow orbit, starting from the player's side of the item.
+          const age = clock.elapsedTime - showcase.start;
+          const ease = 1 - (1 - Math.min(1, age / 1.2)) ** 3;
+          const angle = showcase.from + age * .45;
+          const radius = .95 - .42 * ease;
+          const { position } = showcase.object;
+          showcaseCamera.position.set(position.x + Math.sin(angle) * radius, position.y + .42 - .1 * ease, position.z + Math.cos(angle) * radius);
+          showcaseCamera.lookAt(position.x, position.y + .08, position.z);
+        }
         view = showcaseCamera;
       }
       renderer.render(scene, view);

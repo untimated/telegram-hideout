@@ -1,7 +1,8 @@
-// Small solid notes above the jukebox. No textures or extra lights.
-export function createJukeboxNotes(THREE) {
+// Small solid notes, fitted to the jukebox by default. No textures or extra lights.
+export function createJukeboxNotes(THREE, { spread = .32 } = {}) {
   const object = new THREE.Group();
   object.name = 'JukeboxMusicNotes';
+  object.userData.dynamic = true;
   object.position.set(0, 2.05, .3);
   object.visible = false;
   const colors = [0xf5c36d, 0xe781bb, 0x75d6de];
@@ -9,7 +10,7 @@ export function createJukeboxNotes(THREE) {
   function part(parent, geometry, material, x, y, z = 0) {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
-    // Floating decoration should not intercept clicks aimed at the jukebox.
+    // Floating decoration should not intercept clicks aimed at the fixture below.
     mesh.raycast = () => {};
     parent.add(mesh);
     return mesh;
@@ -42,7 +43,7 @@ export function createJukeboxNotes(THREE) {
     if (!object.visible) return;
     for (let i = 0; i < notes.length; i++) {
       const phase = time * 1.7 + i * 1.9;
-      notes[i].position.set((i - 1) * .32, .06 + i * .04 + Math.sin(phase) * .045, 0);
+      notes[i].position.set((i - 1) * spread, .06 + i * .04 + Math.sin(phase) * .045, 0);
       notes[i].rotation.set(Math.sin(phase * .7) * .08, Math.sin(phase * .55) * .6, Math.sin(phase) * .14);
     }
   }

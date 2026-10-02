@@ -1,14 +1,21 @@
 import { createHUD } from './ui.js';
 import { createWorld } from './world.js';
-import { MOVEMENT_BOUNDS } from './config.js';
+import { mapFromQuery } from './maps.js';
 import { createGamePanels } from './panels.js';
 import { createAudio } from './audio.js';
 import { hideoutTime } from './game/clock.js';
-import { ITEM_BY_ID, isDrink } from './game/catalog.js';
+import { BAND, ITEM_BY_ID, isDrink } from './game/catalog.js';
 import { SEAT_BY_ID } from './game/seats.js';
+import { slotDisplayCoins } from './game/slots.js';
 import { createWalletStore } from './wallet-store.js';
 
 const guestMode = new URLSearchParams(location.search).get('guest') === '1';
+const map = mapFromQuery(new URLSearchParams(location.search).get('map'));
+if (!map) throw new Error('Unknown map');
+const MOVEMENT_BOUNDS = map.bounds;
+const mapQuery = `?map=${encodeURIComponent(map.id)}`;
+document.querySelector('.room-name').textContent = map.label;
+document.title = `${map.label} · Hideout`;
 const ui = createHUD({ guestMode, onMessage: sendChat, onMessageFocus: stopAllMovement });
 
 // Shared clock: the server's time, so NPC shifts and specials match what the server enforces.
@@ -27,6 +34,8 @@ const game = {
   self: { coins: 100, drunk: 0, fuel: 1, asleep: false },
   items: new Map(),
   jukebox: null,
+  band: null,
+  arcade: null,
   sleepers: new Set(),
   seated: new Map(), // playerID -> seat id
   icons: {},
@@ -35,17 +44,22 @@ const audio = createAudio({ serverNow, onBlocked: blocked => panels?.setSoundBlo
 const panels = createGamePanels({
   hud: document.querySelector('.hud'),
   game: {
-    state: () => ({ ...game, selfID, players: playerState }),
+    state: () => ({ ...game, self: { ...game.self, coins: slotDisplayCoins(game.self, serverNow()) }, selfID, players: playerState }),
     position: () => world?.localPosition() ?? playerState.get(selfID),
     now: viewNow,
     send: sendGame,
     audio,
+    inspect: object => world?.inspect(object, Infinity),
+    endInspect: () => world?.endInspect(),
+    isInspecting: () => world?.isInspecting(),
+    serverNow,
   },
 });
 // Backup copy of the wallet (Telegram CloudStorage or localStorage). Nothing is saved until the
 // saved copy has been read back, so a fresh server wallet never overwrites it first.
-const walletStore = createWalletStore();
+const walletStore = createWalletStore(map.id);
 let walletLoaded = false;
+let slotPayoutTimer;
 
 function sendGame(message) {
   if (socket?.readyState !== WebSocket.OPEN) return false;
@@ -53,12 +67,21 @@ function sendGame(message) {
   return true;
 }
 
+function refreshCash() {
+  clearTimeout(slotPayoutTimer);
+  const now = serverNow();
+  ui.setCash(slotDisplayCoins(game.self, now));
+  panels.refresh();
+  const remaining = (game.self.pendingSlotPayout?.revealAt ?? now) - now;
+  if (remaining > 0) slotPayoutTimer = setTimeout(refreshCash, remaining);
+}
+
 function setSelf(state) {
-  game.self = { coins: state.coins, drunk: state.drunk, fuel: state.fuel, asleep: state.asleep };
+  game.self = { coins: state.coins, drunk: state.drunk, fuel: state.fuel, asleep: state.asleep,
+    pendingSlotPayout: state.pendingSlotPayout ?? null };
   if (state.asleep) stopAllMovement();
   if (walletLoaded) walletStore.save(selfID, { coins: state.coins, drunk: state.drunk, fuel: state.fuel, dayKey: state.dayKey });
-  ui.setCash(state.coins);
-  panels.refresh();
+  refreshCash();
 }
 
 // Slurp or bite as the item reaches the mouth: full volume for your own, fading out over 8 m for
@@ -92,12 +115,17 @@ async function applyGameSnapshot(snapshot) {
   const loading = walletStore.load(selfID);
   game.items = new Map(snapshot.items.map(item => [item.id, item]));
   game.jukebox = snapshot.jukebox;
+  game.band = snapshot.band ?? null;
+  game.arcade = snapshot.arcade ?? null;
+  world?.setSlotSpin(game.arcade, serverNow());
+  audio.setSlotSpin(game.arcade);
   game.icons = snapshot.icons ?? {};
   for (const id of [...game.sleepers]) setSleeper(id, false);
   for (const id of snapshot.sleepers) setSleeper(id, true);
   for (const id of [...game.seated.keys()]) setSeat(id, null);
   for (const [id, seat] of Object.entries(snapshot.seated ?? {})) setSeat(id, seat);
   world?.items.reset(snapshot.items);
+  audio.setBand(game.band);
   audio.setJukebox(snapshot.jukebox);
   setSelf(snapshot.self);
   const saved = await loading;
@@ -183,6 +211,7 @@ function removePlayer(id) {
 async function startThree() {
   try {
     world = await createWorld({
+      map,
       host: document.getElementById('scene'),
       input,
       players: playerState,
@@ -204,6 +233,8 @@ async function startThree() {
       getGuestSessionToken: () => guestSessionToken,
       queueOrientation,
       now: viewNow,
+      slotNow: serverNow,
+      isBandPlaying: () => Boolean(game.band && serverNow() < game.band.startedAt + BAND.duration * 1000),
       getSelfState: () => game.self,
       isJukeboxPlaying: () => {
         const progress = audio.progress();
@@ -215,6 +246,7 @@ async function startThree() {
       onProgress: ui.setLoading,
     });
     world?.items.reset([...game.items.values()]);
+    world?.setSlotSpin(game.arcade, serverNow());
     for (const id of game.sleepers) world?.setAsleep(id, true);
     for (const [id, seat] of game.seated) world?.setSeat(id, SEAT_BY_ID.get(seat));
     ui.hideLoading();
@@ -345,10 +377,10 @@ async function connect() {
   ui.setStatus(guestMode ? 'Checking debug guest access…' : 'Checking Telegram access…');
   let response;
   try {
-    response = guestMode ? await fetch(`${location.origin}/auth/guest`, {
+    response = guestMode ? await fetch(`${location.origin}/auth/guest${mapQuery}`, {
       method: 'POST',
       credentials: 'same-origin',
-    }) : await fetch(`${location.origin}/auth`, {
+    }) : await fetch(`${location.origin}/auth${mapQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -378,8 +410,8 @@ async function connect() {
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   socket = guestMode
-    ? new WebSocket(`${protocol}//${location.host}/ws`, ['hideout-guest', `guest.${guestSessionToken}`])
-    : new WebSocket(`${protocol}//${location.host}/ws`);
+    ? new WebSocket(`${protocol}//${location.host}/ws${mapQuery}`, ['hideout-guest', `guest.${guestSessionToken}`])
+    : new WebSocket(`${protocol}//${location.host}/ws${mapQuery}`);
   socket.onmessage = event => {
     let message;
     try { message = JSON.parse(event.data); } catch { return; }
@@ -426,6 +458,7 @@ async function connect() {
     } else if (message.type === 'self') {
       setSelf(message);
     } else if (message.type === 'notice') {
+      panels.slotRejected();
       panels.toast(message.text, message.tone);
     } else if (message.type === 'activity') {
       ui.addSystemLine(message.text);
@@ -445,10 +478,20 @@ async function connect() {
       else world?.items.remove(message.id);
       if (message.byID && served) playConsumeSound(message.byID, served);
       panels.refresh();
+    } else if (message.type === 'arcade_spin') {
+      game.arcade = message.spin;
+      world?.setSlotSpin(message.spin, serverNow());
+      audio.setSlotSpin(message.spin, true);
+      panels.refresh();
     } else if (message.type === 'jukebox') {
       game.jukebox = message.jukebox;
       if (message.jukebox?.byID === selfID) audio.sfx('bell');
       audio.setJukebox(message.jukebox);
+      panels.refresh();
+    } else if (message.type === 'band') {
+      game.band = message.band;
+      if (message.band?.byID === selfID) audio.sfx('bell');
+      audio.setBand(message.band);
       panels.refresh();
     } else if (message.type === 'player_state') {
       if ('asleep' in message) setSleeper(message.id, message.asleep);
@@ -463,6 +506,8 @@ async function connect() {
     }
   };
   socket.onclose = () => {
+    panels.closePanel();
+    audio.setSlotSpin(null);
     clearTimeout(orientationTimer);
     orientationTimer = undefined;
     setConnected(false);
