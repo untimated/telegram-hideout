@@ -113,10 +113,13 @@ export function createSlotMachineModel(t) {
   // Payline markers on the outer frame, without a line crossing the illustrations.
   for (const side of [-1, 1]) box(cabinet, goldLight, .045, .014, .015, side * .406, 1.255, .358);
 
-  const display = face(visuals, drawDisplay(), .61, .085, 0, .915, .232, .45);
+  // Mount the result panel on the lower reel hood, clear of the Spin button below.
+  box(cabinet, m.black, .69, .06, .018, 0, .975, .402);
+  const display = face(visuals, drawDisplay(), .64, .044, 0, .975, .414, .45);
   display.name = 'SlotResultDisplay';
   display.userData.dynamic = true;
-  for (const y of [.861, .969]) box(cabinet, m.brass, .66, .012, .025, 0, y, .224);
+  for (const y of [.945, 1.005]) box(cabinet, m.brass, .69, .006, .012, 0, y, .417);
+  for (const x of [-.342, .342]) box(cabinet, m.brass, .006, .06, .012, x, .975, .417);
 
   const deck = box(cabinet, teal, .89, .07, .34, 0, .797, .265);
   deck.rotation.x = .25;
