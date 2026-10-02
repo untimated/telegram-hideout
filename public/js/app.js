@@ -1,5 +1,6 @@
 import { createHUD } from './ui.js';
 import { createWorld } from './world.js';
+import { WALK_SPEED } from './config.js';
 import { mapFromQuery } from './maps.js';
 import { createGamePanels } from './panels.js';
 import { createAudio } from './audio.js';
@@ -157,8 +158,6 @@ let lastOrientationAt = -Infinity;
 let orientationTimer;
 const moveInterval = 200;
 const orientationInterval = 100;
-const moveStep = .3;
-const walkSpeed = moveStep * 1000 / moveInterval;
 
 function applyMove(position, forward, strafe, heading, distance) {
   forward *= -distance;
@@ -226,7 +225,7 @@ async function startThree() {
       isLocallyMoving: () => heldDirections.size > 0 && socket?.readyState === WebSocket.OPEN,
       getMovement: activeMovement,
       applyMove,
-      walkSpeed,
+      walkSpeed: WALK_SPEED,
       bubbles: ui.bubbles,
       addDebug: ui.addDebug,
       guestMode,
@@ -234,6 +233,7 @@ async function startThree() {
       queueOrientation,
       now: viewNow,
       slotNow: serverNow,
+      onListener: (position, forward, up) => audio.setListener(position, forward, up),
       isBandPlaying: () => Boolean(game.band && serverNow() < game.band.startedAt + BAND.duration * 1000),
       getSelfState: () => game.self,
       isJukeboxPlaying: () => {
@@ -249,6 +249,7 @@ async function startThree() {
     world?.setSlotSpin(game.arcade, serverNow());
     for (const id of game.sleepers) world?.setAsleep(id, true);
     for (const [id, seat] of game.seated) world?.setSeat(id, SEAT_BY_ID.get(seat));
+    await world?.ready;
     ui.hideLoading();
   } catch {
     ui.addDebug('three.js: renderer unavailable', 'muted');
@@ -613,8 +614,8 @@ setInterval(() => {
   audio.sfx('footstep', .8 + Math.random() * .2, .9 + Math.random() * .2);
 }, 420);
 
-// Jukebox volume follows the listener's distance from the box.
-setInterval(() => audio.setListener(playerState.get(selfID)), 500);
+// Keep distance falloff available when the renderer could not start.
+setInterval(() => { if (!world) audio.setListener(playerState.get(selfID)); }, 500);
 
 ui.addDebug('client: booting…', 'muted');
 startThree();

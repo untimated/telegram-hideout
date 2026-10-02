@@ -5,13 +5,10 @@ import { pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { makeSession, readSession, readSessionToken, sessionCookie, verifyInitData } from './auth.js';
 import { createAvatarLoader } from './avatars.js';
-import { SPAWN_AREA } from './public/js/config.js';
+import { SPAWN_AREA, WALK_SPEED } from './public/js/config.js';
 import { MAPS, mapFromQuery } from './public/js/maps.js';
 import { AMBIENCE_FILE, BAND, ITEM_BY_ID, SONGS } from './public/js/game/catalog.js';
 import { createGame } from './game.js';
-
-// Client walking speed (m/s): a .3 m step every 200 ms. Reported positions are checked against it.
-const WALK_SPEED = 1.5;
 
 // A random spot in the entrance area, at least SPAWN_GAP from everyone already there (the best of
 // a few tries when it is crowded).
@@ -487,7 +484,8 @@ export function createHideoutServer(options = {}) {
         movementTimes.set(playerID, time);
         const previous = { x: position.x, z: position.z };
         // A diagonal is normalized to the same fixed step length as a straight move.
-        const delta = [strafe * 0.3, -forward * 0.3];
+        const step = WALK_SPEED * .2; // One 200 ms movement step.
+        const delta = [strafe * step, -forward * step];
         // Rotate the fixed local step around Y; clients cannot choose distance/speed.
         const dx = delta[0] * Math.cos(yaw) + delta[1] * Math.sin(yaw);
         const dz = -delta[0] * Math.sin(yaw) + delta[1] * Math.cos(yaw);

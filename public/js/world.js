@@ -27,7 +27,7 @@ const SHOWCASE_SECONDS = 3.2;
 
 // onPick(target) fires for a tap/click on the scene (target is null for empty space); onHover(target)
 // reports what the reticle points at, a few times a second. getSelfState() -> { asleep, drunk }.
-export async function createWorld({ host, input, players, getSelfID, getOrientation, onLook, isLocallyMoving, getMovement, applyMove, walkSpeed, bubbles, addDebug, guestMode, getGuestSessionToken, queueOrientation, onPick, onHover, getSelfState, now, slotNow = now, isJukeboxPlaying, isBandPlaying, onStats, onProgress, map = MAPS.main }) {
+export async function createWorld({ host, input, players, getSelfID, getOrientation, onLook, isLocallyMoving, getMovement, applyMove, walkSpeed, bubbles, addDebug, guestMode, getGuestSessionToken, queueOrientation, onPick, onHover, getSelfState, now, slotNow = now, isJukeboxPlaying, isBandPlaying, onStats, onProgress, onListener, map = MAPS.main }) {
   // Reports a loading step, then yields a frame so the loading screen can repaint before the next
   // blocking step.
   const progress = async (text, fraction) => {
@@ -45,11 +45,30 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
     const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 130);
     camera.position.set(map.spawn.x, eyeHeight, map.spawn.z);
     camera.rotation.order = 'YXZ';
+    const listenerForward = new THREE.Vector3();
+    const listenerUp = new THREE.Vector3();
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const quality = createQualityGovernor({ renderer, scene, addDebug });
+    const showcaseCamera = new THREE.PerspectiveCamera(45, 1, .02, 60);
     host.prepend(renderer.domElement);
+    let viewWidth = 0;
+    let viewHeight = 0;
+    const resize = () => {
+      const width = Math.max(1, host.clientWidth);
+      const height = Math.max(1, host.clientHeight);
+      if (width === viewWidth && height === viewHeight) return;
+      viewWidth = width;
+      viewHeight = height;
+      renderer.setSize(width, height, false);
+      camera.aspect = showcaseCamera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      showcaseCamera.updateProjectionMatrix();
+    };
+    new ResizeObserver(resize).observe(host);
+    resize();
     let lookPointer;
     function stopLooking() {
       if (lookPointer && renderer.domElement.hasPointerCapture(lookPointer.id)) {
@@ -141,14 +160,6 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
     renderer.shadowMap.needsUpdate = true;
     const picker = createPicker(THREE, { camera, canvas: renderer.domElement, level: stage, actors, getSelfID });
     const rim = createRimHighlight(THREE);
-    rim.warmUp(renderer, camera);
-    servedItems.warmUp(renderer, scene, camera);
-    // Compile every shader the room needs (in parallel where the browser supports it) and draw one
-    // frame, so the first seconds of play do not stutter.
-    await progress('Warming up shaders', .7);
-    await renderer.compileAsync(scene, camera);
-    await progress('Almost there', .95);
-    renderer.render(scene, camera);
 
     function createPlayer(player) {
       const group = createRobotCharacter(player);
@@ -214,7 +225,6 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
     }
 
     // The showcase: a second camera that circles a served item for a few seconds.
-    const showcaseCamera = new THREE.PerspectiveCamera(45, 1, .02, 60);
     let showcase = null;
     function endShowcase() {
       if (!showcase) return;
@@ -223,18 +233,9 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       host.classList.remove('showcase');
     }
 
-    const resize = () => {
-      const width = host.clientWidth;
-      const height = host.clientHeight;
-      renderer.setSize(width, height, false);
-      camera.aspect = showcaseCamera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      showcaseCamera.updateProjectionMatrix();
-    };
-    new ResizeObserver(resize).observe(host);
-    resize();
     const world = {
       stage,
+      ready: quality.ready,
       upsertPlayer,
       removePlayer,
       setLocalPlayer,
@@ -302,13 +303,30 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
     for (const player of players.values()) upsertPlayer(player);
     setLocalPlayer(getSelfID());
 
+    // Warm the room and its initial players at the actual viewport size, including the first
+    // texture uploads, shadow pass and glass buffers, before the loading screen can fade out.
+    await progress('Warming up shaders', .7);
+    const initialPlayer = players.get(getSelfID());
+    if (initialPlayer) camera.position.set(initialPlayer.x, eyeHeight, initialPlayer.z);
+    const initialOrientation = getOrientation();
+    camera.rotation.set(initialOrientation.pitch, initialOrientation.yaw, 0, 'YXZ');
+    camera.updateMatrixWorld();
+    rim.warmUp(renderer, camera);
+    servedItems.warmUp(renderer, scene, camera);
+    await renderer.compileAsync(scene, camera);
+    await progress('Preparing the first frame', .9);
+    renderer.render(scene, camera);
+    await progress('Getting the room ready', .95);
+    // Joins and leaves can arrive while the shaders and first frame are warming.
+    for (const id of actors.keys()) if (!players.has(id)) removePlayer(id);
+    for (const player of players.values()) upsertPlayer(player);
+
     const clock = new THREE.Clock();
     let nextHover = 0;
     let lastBlur = '';
     let lastDrunk = null;
     let swayUntil = -Infinity;
     const stats = { frames: 0, since: 0 };
-    const quality = createQualityGovernor({ renderer, scene, addDebug });
     renderer.setAnimationLoop(() => {
       const delta = Math.min(clock.getDelta(), .1);
       stage.userData.animate?.(clock.elapsedTime);
@@ -393,6 +411,11 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
         'YXZ',
       );
       camera.updateMatrixWorld();
+      // Ears stay with the player during an item/arcade close-up. Include pitch and roll,
+      // seated height and local movement prediction, using the camera's actual transform.
+      listenerForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      listenerUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+      onListener?.(camera.position, listenerForward, listenerUp);
       const blur = drunk > 0 ? `blur(${(drunk * 3.2).toFixed(1)}px)` : '';
       if (blur !== lastBlur) renderer.domElement.style.filter = lastBlur = blur;
       if (onHover && time >= nextHover) {
@@ -437,14 +460,17 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
         }
         view = showcaseCamera;
       }
+      stats.frames++;
+      const sampleStats = time - stats.since >= .5;
+      const fps = sampleStats ? stats.frames / (time - stats.since) : null;
+      // A resolution change clears the canvas. Apply it before drawing so this frame repaints
+      // the new buffer instead of exposing the page background until the next frame.
+      if (sampleStats) quality.sample(fps, time);
       renderer.render(scene, view);
       // Rolling render stats for the log panel: fps and frame time over half a second, plus the
       // last frame's draw calls and triangles (shadow passes included).
-      stats.frames++;
-      if (time - stats.since >= .5) {
+      if (sampleStats) {
         const { render, memory, programs } = renderer.info;
-        const fps = stats.frames / (time - stats.since);
-        quality.sample(fps, time);
         onStats?.({
           fps,
           ms: (time - stats.since) * 1000 / stats.frames,

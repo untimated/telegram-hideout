@@ -94,7 +94,7 @@ test('main and prototype isolate presence, chat, movement, wallets and reconnect
   });
   proto.client.send(JSON.stringify({ type: 'move', direction: 'up' }));
   const move = await moved;
-  assert.equal(move.z, Math.round((protoSpawn.z - .3) * 1e6) / 1e6);
+  assert.equal(move.z, Math.round((protoSpawn.z - .36) * 1e6) / 1e6);
   const joinedAgain = await connect(1, 'main');
   assert.equal(joinedAgain.welcome.game.self.coins, 100);
   assert.equal(joinedAgain.welcome.players[0].z, mainSpawn.z);

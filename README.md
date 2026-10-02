@@ -123,7 +123,7 @@ Holding an arrow button, arrow key, or WASD sends at most one direction every
 and Left/A and Right/D strafe relative to the camera heading. Looking up or down
 does not change walking speed. Typing in chat or leaving the window stops held
 movement. The server enforces a `160ms` minimum between steps per player, applies
-a fixed `0.3` step using the submitted heading, clamps positions inside the stage
+a fixed `0.36` m step using the submitted heading (1.8 m/s walking speed), clamps positions inside the stage
 boundary, and broadcasts the result. While a direction is held, the local camera
 moves smoothly every frame at roughly the same speed; remote players ease between
 server updates. Releasing input stops local movement immediately. The input log
@@ -174,7 +174,8 @@ light and an "E · …" hint, and E or a tap opens its panel (taps from further 
 - **Jukebox**: pay 10 coins to play a song for the whole room, synced by start time; anyone can
   stop it. Volume falls off with distance, and the bar ambience loops underneath.
 - **Live band**: tap the stage during the band's 17:00–23:00 shift and pay 15 coins for one
-  performance of the track in `assets/band/`. It plays once at fixed default volume, without
+  performance of the track in `assets/band/`. It plays once from the stage, with volume fading
+  over distance and stereo direction becoming stronger farther away, without
   stop or restart controls. Everyone shares the same start time, including reconnects; another
   payment is accepted only after the song ends. Live music quiets the jukebox and blocks new
   jukebox purchases until the set finishes. The global sound toggle still mutes locally.
@@ -197,7 +198,19 @@ Where the pieces live:
 - `public/js/interaction.js` raycasts taps against `level.userData.interactables`, served items
   and other players; `public/js/panels.js` is the HUD (meters, menus, modals, toasts);
   `public/js/items.js` builds the served food and drink models; `public/js/audio.js` plays the
-  jukebox and ambience; `public/js/stage/npcs.js` shows NPCs during their shifts and animates
+  jukebox and ambience; `public/js/spatial-audio.js` routes positional effects through a shared
+  listener. Jukebox music, the live band and slot-machine cues use camera-relative stereo panning,
+  reaching full left/right separation at 40 degrees off-centre for music and 30 degrees
+  for slot cues. Slot cues fade to silence
+  over 8 m horizontally; jukebox music retains its volume steps and existing distance curve.
+  Both music sources' stereo bias stays at 20 percent strength within 2 m, then grows to full strength
+  at 10 m and beyond, so nearby music is more centred and distant music is more directional.
+  The listener follows the predicted player
+  camera, including seated height and head rotation, and stays there during prop close-ups.
+  Sound unlocks on a gesture and retries after browser suspension; browsers without Web Audio
+  retain distance falloff. The band uses the jukebox's distance curve at its own full base volume;
+  jukebox volume steps affect only jukebox songs. UI effects and ambience keep their existing mix.
+  `public/js/stage/npcs.js` shows NPCs during their shifts and animates
   them; `public/js/stage/boards.js` draws the specials easels.
 - Menu pictures are optional: `assets/menu-icons/<item id>.webp` (or .png) replaces the emoji.
 
@@ -218,10 +231,14 @@ view only: the server still sells by real Hideout time.
   meshes into 66) and merges each robot's rigid parts (about 100 meshes per robot into 20-ish).
   Interactables, NPCs, served items, transparent meshes and anything marked
   `userData.dynamic = true` are left separate; mark new moving props that way.
-- The shadow map is rendered once after loading (`shadowMap.autoUpdate = false`); characters
+- The shadow map is rendered once during loading (`shadowMap.autoUpdate = false`); characters
   and items use blob shadows.
+- `public/js/world.js` warms shaders and draws the room at its actual window size and starting
+  camera view, with initial players included. The loading screen waits for a short frame-rate
+  calibration before opening the room, so slower devices can settle their initial quality first.
 - `public/js/quality.js` lowers the render resolution on slow devices (down to 0.75x) and, as a
-  last step, turns off the small lamp point lights.
+  last step, turns off the small lamp point lights. Quality adjustments happen before drawing
+  the frame so canvas resizing does not expose a blank frame or the purple page background.
 
 Three.js already frustum-culls every object; with the level merged, draw calls and per-pixel
 lighting (22 real-time lights) are what cost frames, not culling.

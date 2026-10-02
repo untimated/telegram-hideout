@@ -1,16 +1,19 @@
 import { BAND, SONG_BY_ID } from './game/catalog.js';
 import { SLOTS } from './game/slots.js';
+import { createSpatialAudio } from './spatial-audio.js';
 
 const JUKEBOX_POSITION = { x: -6.2, z: .9 };
+const MUSIC_PANNING = { fullPanDegrees: 40, panFadeStart: 2, panFadeEnd: 10 };
 const MUTE_KEY = 'hideout.muted';
 // Jukebox volume in steps of 1..MUSIC_STEPS; the top step is the device's full volume.
 const MUSIC_KEY = 'hideout.musicLevel';
 const SLOT_REEL_START = 2.34; // Just before the lever attack at about 2.35 seconds.
 export const MUSIC_STEPS = 4;
 
-// Shared music seeks to the server's start time. Live sets use the device's default volume;
-// jukebox songs have a local volume control and distance falloff. A browser gesture unlocks sound.
+// Shared music seeks to the server's start time. Both music sources fade with distance;
+// jukebox songs also have a local volume control. A browser gesture unlocks sound.
 export function createAudio({ serverNow, onBlocked }) {
+  const spatial = createSpatialAudio();
   const ambience = new Audio('/music/ambience.mp3');
   ambience.loop = true;
   ambience.volume = .16;
@@ -22,19 +25,19 @@ export function createAudio({ serverNow, onBlocked }) {
   const slotWin = new Audio('/sfx/casino-win.mp3');
   const slotFail = new Audio('/sfx/trumpet-fail.mp3');
   slotReel.preload = slotPayout.preload = slotWin.preload = slotFail.preload = 'auto';
-  slotReel.volume = .65;
-  slotPayout.volume = .7;
-  slotWin.volume = .45;
-  slotFail.volume = .5;
+  for (const [element, volume] of [[slotReel, .65], [slotPayout, .7], [slotWin, .45], [slotFail, .5]]) {
+    spatial.addSource(element, { position: { x: SLOTS.x, y: 1.2, z: SLOTS.z }, volume, range: 8 });
+  }
   let slot = null;
   let slotTimer;
-  let slotFalloff = 1;
   const music = new Audio();
   music.preload = 'auto';
   let current = null;
   const bandMusic = new Audio(`/music/${BAND.id}.mp3`);
   bandMusic.preload = 'auto';
-  bandMusic.volume = 1;
+  const bandEmitter = spatial.addSource(bandMusic, {
+    position: { x: BAND.x, y: 1.6, z: BAND.z }, volume: 1, range: Infinity, ...MUSIC_PANNING,
+  });
   let band = null;
   let bandTimer;
   let unlocked = false;
@@ -45,14 +48,20 @@ export function createAudio({ serverNow, onBlocked }) {
     const saved = Number(localStorage.getItem(MUSIC_KEY));
     if (Number.isInteger(saved) && saved >= 1 && saved <= MUSIC_STEPS) musicLevel = saved;
   } catch { /* Storage unavailable. */ }
-  const applyMusicVolume = () => { music.volume = falloff * musicLevel / MUSIC_STEPS; };
+  // This song keeps its own distance curve and volume steps; the shared layer pans it.
+  const jukeboxEmitter = spatial.addSource(music, {
+    position: { ...JUKEBOX_POSITION, y: 1.2 }, volume: musicLevel / MUSIC_STEPS, range: Infinity,
+    ...MUSIC_PANNING,
+  });
+  const applyMusicVolume = () => jukeboxEmitter.setVolume(falloff * musicLevel / MUSIC_STEPS);
+  const volumeAt = (position, source) => Math.max(.22, Math.min(1, 1.15 - Math.hypot(position.x - source.x, position.z - source.z) / 14));
   try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch { /* Storage unavailable. */ }
 
   const offsetFor = state => Math.max(0, (serverNow() - state.startedAt) / 1000);
 
   function tryPlay(element) {
     if (muted) return;
-    element.play().then(() => onBlocked?.(false)).catch(() => { if (!unlocked) onBlocked?.(true); });
+    element.play().then(() => onBlocked?.(spatial.blocked)).catch(() => { if (!unlocked || spatial.blocked) onBlocked?.(true); });
   }
 
   function startMusic() {
@@ -111,6 +120,7 @@ export function createAudio({ serverNow, onBlocked }) {
   }
 
   function unlock() {
+    spatial.unlock().then(ready => { if (!muted) onBlocked?.(!ready); });
     if (unlocked) return;
     unlocked = true;
     onBlocked?.(false);
@@ -159,18 +169,14 @@ export function createAudio({ serverNow, onBlocked }) {
       if (unlocked) startMusic();
       else onBlocked?.(true);
     },
-    // Distance falloff from the jukebox; call a few times a second with the listener position.
-    setListener(position) {
+    // The world supplies the player camera's predicted position, forward and up every frame.
+    setListener(position, forward, up) {
       if (!position) return;
-      const distance = Math.hypot(position.x - JUKEBOX_POSITION.x, position.z - JUKEBOX_POSITION.z);
-      falloff = Math.max(.22, Math.min(1, 1.15 - distance / 14));
+      spatial.setListener(position, forward, up);
+      falloff = volumeAt(position, JUKEBOX_POSITION);
       applyMusicVolume();
+      bandEmitter.setVolume(volumeAt(position, BAND));
       ambience.volume = current || band ? .07 : .16;
-      slotFalloff = Math.max(0, 1 - Math.hypot(position.x - SLOTS.x, position.z - SLOTS.z) / 8);
-      slotReel.volume = .65 * slotFalloff;
-      slotPayout.volume = .7 * slotFalloff;
-      slotWin.volume = .45 * slotFalloff;
-      slotFail.volume = .5 * slotFalloff;
     },
     get muted() { return muted; },
     get musicLevel() { return musicLevel; },
@@ -185,6 +191,7 @@ export function createAudio({ serverNow, onBlocked }) {
       if (muted) {
         music.pause(); bandMusic.pause(); ambience.pause(); slotReel.pause(); slotPayout.pause(); slotWin.pause(); slotFail.pause();
       } else {
+        spatial.unlock().then(ready => onBlocked?.(!ready));
         unlocked = true; tryPlay(ambience); startMusic(); startBand(); startSlotReel();
       }
       return muted;

@@ -169,7 +169,7 @@ test('only signed group members can connect and relay chat under their verified 
   guest.send(JSON.stringify({ type: 'move', direction: 'left' }));
   for (const [data] of await guestMoves) {
     assert.deepEqual(JSON.parse(data.toString()), {
-      type: 'move', id: String(Number.MAX_SAFE_INTEGER - 1), name: 'Guest 1', direction: 'left', label: 'Strafe left', yaw: 0, x: -4.3, z: 5.5,
+      type: 'move', id: String(Number.MAX_SAFE_INTEGER - 1), name: 'Guest 1', direction: 'left', label: 'Strafe left', yaw: 0, x: -4.36, z: 5.5,
     });
   }
   const guestChat = Promise.all([once(guest, 'message'), once(secondGuest, 'message')]);
@@ -240,7 +240,7 @@ test('only signed group members can connect and relay chat under their verified 
   await aliceChat;
   assert.deepEqual(aliceSaw, ['self', 'notice', 'chat']);
 
-  for (const [direction, x, z] of [['right', -3.7, 5.5], ['up', -3.7, 5.2]]) {
+  for (const [direction, x, z] of [['right', -3.64, 5.5], ['up', -3.64, 5.14]]) {
     moveTime += 200;
     const registered = Promise.all([once(a, 'message'), once(b, 'message')]);
     a.send(JSON.stringify({ type: 'move', direction }));
@@ -259,9 +259,9 @@ test('only signed group members can connect and relay chat under their verified 
   for (const [data] of await barrier) assert.equal(JSON.parse(data).type, 'chat');
 
   for (const [yaw, direction, x, z] of [
-    [-Math.PI / 2, 'up', -3.4, 5.2],
-    [-Math.PI / 2, 'right', -3.4, 5.5],
-    [Math.PI / 4, 'up', -3.612132, 5.287868],
+    [-Math.PI / 2, 'up', -3.28, 5.14],
+    [-Math.PI / 2, 'right', -3.28, 5.5],
+    [Math.PI / 4, 'up', -3.534558, 5.245442],
   ]) {
     moveTime += 200;
     const received = Promise.all([once(a, 'message'), once(b, 'message')]);
@@ -282,11 +282,11 @@ test('only signed group members can connect and relay chat under their verified 
   assert.equal(boundaryMove.x, 6);
   assert.equal(boundaryMove.z, -6);
   // Reported client positions are adopted when reachable at walking speed; a stop message only
-  // syncs; a far-off (teleport) report is approached by at most walking speed (1.5 * 1.2 * .2 + .05 m).
+  // syncs; a far-off (teleport) report is approached by at most walking speed (1.8 * 1.2 * .2 + .05 m).
   for (const [message, x, z, direction] of [
     [{ forward: 1, strafe: 0, yaw: 0, x: 5.8, z: -5.8 }, 5.8, -5.8, 'up'],
     [{ forward: 0, strafe: 0, yaw: 0, x: 5.7, z: -5.8 }, 5.7, -5.8, 'stop'],
-    [{ forward: 1, strafe: 0, yaw: 0, x: 0, z: 0 }, 5.412618, -5.507576, 'up'],
+    [{ forward: 1, strafe: 0, yaw: 0, x: 0, z: 0 }, 5.362151, -5.456224, 'up'],
   ]) {
     moveTime += 200;
     const registered = once(a, 'message');
