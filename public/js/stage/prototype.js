@@ -1,5 +1,6 @@
 import { createStageContext } from './context.js';
 import { buildNewsstand } from './newsstand.js';
+import { buildLeaderboard } from './leaderboard.js';
 
 // Add experimental props here. Move an approved prop's builder into a main-room area later.
 export function buildPrototypeStage(THREE, scene, options = {}) {
@@ -17,6 +18,7 @@ export function buildPrototypeStage(THREE, scene, options = {}) {
   const femaleRobot = place(models.FemaleRobot(), 0, 0, 0, Math.PI);
   animators.push(time => femaleRobot.userData.animate(time));
   buildNewsstand(context, 0, 2);
+  buildLeaderboard(context, -2.4, 2.5, 0.2);
   scene.add(new THREE.HemisphereLight(0xe4efff, 0x45403c, 2));
   const light = new THREE.DirectionalLight(0xffe3bb, 2);
   light.position.set(-3, 8, 4);

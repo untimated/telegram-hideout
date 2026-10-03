@@ -6,6 +6,7 @@ import { SLOTS, maxSlotBet, slotResultText } from './game/slots.js';
 import { MUSIC_STEPS } from './audio.js';
 import { NEWSPAPER, newsArticle } from './news.js';
 import { buildNewspaper } from './newspaper.js';
+import { LEADERBOARD_PREVIEW } from './leaderboard-preview.js';
 
 import { INTERACT_RANGE } from './interaction.js';
 
@@ -503,6 +504,30 @@ export function createGamePanels({ hud, game }) {
     });
   }
 
+  function openLeaderboard() {
+    show({
+      key: 'leaderboard',
+      kicker: 'Hideout',
+      title: 'Leaderboard',
+      build(body, foot) {
+        for (const ranking of LEADERBOARD_PREVIEW) {
+          body.append(element('h3', 'leaderboard-heading', ranking.title));
+          const list = element('div', 'menu-list');
+          ranking.entries.forEach((entry, index) => {
+            const row = element('div', 'menu-row');
+            const info = element('div', 'menu-info');
+            info.append(element('div', 'menu-name', entry.name));
+            const rank = ['🥇', '🥈', '🥉'][index] ?? String(index + 1);
+            row.append(element('span', 'menu-icon', rank), info, element('span', 'menu-sub', `${entry.value} ${ranking.metric.toLowerCase()}`));
+            list.append(row);
+          });
+          body.append(list);
+        }
+        foot.append(element('p', 'panel-note', 'Appearance preview · Example rankings'));
+      },
+    });
+  }
+
   // Opens whatever a picked target is about (see interaction.js for target shapes). Targets out of
   // reach are ignored, so taps from across the room do nothing.
   let openedAt = null;
@@ -515,6 +540,7 @@ export function createGamePanels({ hud, game }) {
     if (target.kind === 'item') return openItem(target.served);
     if (target.kind === 'player') return openPlayer(target.id);
     if (action.type === 'arcade') return openArcade(target);
+    if (action.type === 'leaderboard') return openLeaderboard();
     if (action.type === 'menu') return openMenu(action.menu);
     if (action.type === 'npc') return openNpc(action.npc);
     if (action.type === 'jukebox') return openJukebox();
@@ -549,6 +575,7 @@ export function createGamePanels({ hud, game }) {
   function setHover(target) {
     hovered = target && target.distance <= INTERACT_RANGE ? target : null;
     hint.hidden = !hovered || !modal.hidden;
+    hint.classList.toggle('leaderboard-hint', hovered?.action?.type === 'leaderboard');
     if (hovered) hint.textContent = `${touch ? 'Tap' : 'E'} · ${labelFor(hovered)}`;
   }
 

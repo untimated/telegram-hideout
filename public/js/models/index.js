@@ -9,6 +9,7 @@ import { createPalmModels } from './palms.js';
 import { createSlotMachineModel } from './slot-machine.js';
 import { createFemaleRobotModel } from './female-robot.js';
 import { createNewsstandModel } from './newsstand.js';
+import { createLeaderboardModel } from './leaderboard.js';
 
 export function createModelKit(THREE, { Robot } = {}) {
   const tools = createProceduralTools(THREE);
@@ -24,6 +25,7 @@ export function createModelKit(THREE, { Robot } = {}) {
     SlotMachine: () => createSlotMachineModel(tools),
     FemaleRobot: () => createFemaleRobotModel(THREE),
     Newsstand: () => createNewsstandModel(tools),
+    Leaderboard: () => createLeaderboardModel(tools),
     materials: tools.materials,
     ...(Robot ? { Robot } : {}),
   });

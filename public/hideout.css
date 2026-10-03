@@ -490,6 +490,11 @@ button, input { font: inherit; }
   cursor: pointer;
   backdrop-filter: blur(10px);
 }
+.use-hint.leaderboard-hint {
+  top: auto;
+  bottom: calc(var(--safe-bottom) + 70px);
+}
+.leaderboard-heading { margin: 14px 0 8px; color: #ffe0a5; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; }
 .use-hint[hidden], .sound-chip[hidden], .sleep-overlay[hidden], .game-panel[hidden], .modal-backdrop[hidden] { display: none; }
 
 .toasts {
