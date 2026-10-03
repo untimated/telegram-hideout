@@ -1,7 +1,4 @@
-import { APP_VERSION } from './config.js';
-
 export function createHUD({ guestMode, onMessage, onMessageFocus }) {
-  for (const label of document.querySelectorAll('[data-app-version]')) label.textContent = `v${APP_VERSION}`;
   const status = document.getElementById('status');
   const debug = document.getElementById('debug');
   const debugPanel = document.getElementById('debug-panel');

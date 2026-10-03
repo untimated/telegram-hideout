@@ -1,6 +1,3 @@
-// Shown on the loading screen and in the log panel. Keep in step with package.json's version.
-export const APP_VERSION = '1.0.0-beta.1';
-
 // Shared walking speed in metres per second (1.2x the original 1.5 m/s).
 export const WALK_SPEED = 1.8;
 

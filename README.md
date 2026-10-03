@@ -5,6 +5,9 @@ Install dependencies with `pnpm install`, set `TELEGRAM_BOT_TOKEN` and numeric
 development, copy `.env.example` to `.env`, fill in those values, and run
 `npm run dev` (or `pnpm dev`); the dev command loads `.env` automatically. The
 Cloud Run `start` command uses the service's configured environment variables.
+Set `APP_VERSION` (for example, `1.0.0-beta.2`, without a leading `v`) to change
+the build tag on the loading screen and in the log panel. If unset or blank,
+it defaults to the version in `package.json`. Restart the server after changing it.
 The group setting
 accepts one numeric ID or a comma-separated list; members of any listed group
 share the same room. Open the page

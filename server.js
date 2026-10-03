@@ -137,7 +137,13 @@ export function createHideoutServer(options = {}) {
     return false;
   }
 
-  const page = readFileSync(new URL('./public/hideout.html', import.meta.url));
+  const packageVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+  const appVersion = String(options.appVersion ?? process.env.APP_VERSION ?? '').trim() || packageVersion;
+  const versionLabel = `v${appVersion}`.replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]);
+  const page = readFileSync(new URL('./public/hideout.html', import.meta.url), 'utf8')
+    .replaceAll('__APP_VERSION__', () => versionLabel);
   const staticAsset = (file, contentType, cacheControl = 'no-cache') => ({
     contentType,
     cacheControl,
