@@ -63,6 +63,21 @@ selectors and a layout that stacks on phones. Close it with × or Escape; walkin
 away also closes it. Reader's Digest RSS currently returns HTTP 403 from the
 development environment, so this edition is a fixed selection, not an automatic feed.
 
+Wolfred's bar menu includes Coffee for 5 coins. Drinking it reduces drunk by 0.1
+and restores 0.3 fuel, capped by the normal 0–1 meter limits. It is served as an
+ivory cup of black coffee on a saucer, matching its generated menu icon.
+
+The Gossip Bar has a half-scale copy behind the fountain's two east stools,
+facing the sofa lounge and marking the boundary between the two areas.
+Both maps use `public/js/stage/newsstand.js` to register
+the rack and its three story interactions; the prototype copy remains available.
+While the reader is open, `holding-paper(96K).mp3` loops quietly. Opening a paper
+or changing stories plays `paper-filp(96K).mp3` starting 0.24 seconds in (about 20%
+of the clip); choosing the current story again
+does not replay it. Closing the reader, walking away or opening another panel
+stops the paper sounds. The sound toggle pauses them and resumes only the holding
+loop when reading is still active.
+
 The photos are credited Wikimedia Commons pictures of the same subjects, not images
 from Reader's Digest. Small JPEG copies live in `assets/news/` and are served from
 `/news-photos/`, avoiding cross-origin canvas restrictions. `public/js/news-photo.js`

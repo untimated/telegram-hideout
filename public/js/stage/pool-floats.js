@@ -33,11 +33,14 @@ export function buildPoolFloats({ THREE, level, animators }) {
     { object: ring('#3fc4e0'), x: POOL.x - .5, phase: Math.PI, period: 105 },
   ];
 
-  animators.push(time => {
+  const animate = time => {
     for (const { object, x, phase, period } of floats) {
       const t = time * Math.PI * 2 / period + phase;
       object.position.set(x + Math.sin(t * 2.3) * .18, WATER_Y + .04 + Math.sin(time * 1.4 + phase) * .02, Math.sin(t) * reach);
       object.rotation.set(Math.sin(time * 1.1 + phase) * .05, t * .6, Math.cos(time * .9 + phase) * .05);
     }
-  });
+  };
+  // Start on the water even before the first animation frame or in a still preview.
+  animate(0);
+  animators.push(animate);
 }

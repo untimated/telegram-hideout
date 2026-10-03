@@ -8,6 +8,7 @@ const MUTE_KEY = 'hideout.muted';
 // Jukebox volume in steps of 1..MUSIC_STEPS; the top step is the device's full volume.
 const MUSIC_KEY = 'hideout.musicLevel';
 const SLOT_REEL_START = 2.34; // Just before the lever attack at about 2.35 seconds.
+const PAPER_FLIP_START = .24; // About 20% into the 1.2-second clip, skipping the quiet lead-in.
 export const MUSIC_STEPS = 4;
 
 // Shared music seeks to the server's start time. Both music sources fade with distance;
@@ -20,6 +21,13 @@ export function createAudio({ serverNow, onBlocked }) {
   ambience.preload = 'none';
   const sfx = Object.fromEntries(['click', 'bell', 'slurp', 'bite', 'footstep'].map(name => [name, new Audio(`/sfx/${name}.mp3`)]));
   const sfxVolume = { click: .5, bell: .6, slurp: .8, bite: .8, footstep: .35 };
+  const holdingPaper = new Audio('/sfx/holding-paper.mp3');
+  holdingPaper.loop = true;
+  holdingPaper.volume = .25;
+  const paperFlip = new Audio('/sfx/paper-flip.mp3');
+  paperFlip.volume = .6;
+  holdingPaper.preload = paperFlip.preload = 'auto';
+  let reading = false;
   const slotReel = new Audio('/sfx/slot-reel.mp3');
   const slotPayout = new Audio('/sfx/slot-payout.mp3');
   const slotWin = new Audio('/sfx/casino-win.mp3');
@@ -62,6 +70,10 @@ export function createAudio({ serverNow, onBlocked }) {
   function tryPlay(element) {
     if (muted) return;
     element.play().then(() => onBlocked?.(spatial.blocked)).catch(() => { if (!unlocked || spatial.blocked) onBlocked?.(true); });
+  }
+
+  function startReading() {
+    if (reading && unlocked && !muted && holdingPaper.paused) tryPlay(holdingPaper);
   }
 
   function startMusic() {
@@ -128,10 +140,29 @@ export function createAudio({ serverNow, onBlocked }) {
     startMusic();
     startBand();
     startSlotReel();
+    startReading();
   }
   for (const eventName of ['pointerdown', 'keydown']) document.addEventListener(eventName, unlock, { capture: true });
 
   return {
+    // Local reader sounds follow panel lifetime, independently of shared room music.
+    setReading(active) {
+      if (reading === active) return;
+      reading = active;
+      if (reading) {
+        holdingPaper.currentTime = 0;
+        startReading();
+      } else {
+        holdingPaper.pause();
+        paperFlip.pause();
+        holdingPaper.currentTime = paperFlip.currentTime = 0;
+      }
+    },
+    flipPaper() {
+      if (!reading || !unlocked || muted) return;
+      paperFlip.currentTime = PAPER_FLIP_START;
+      tryPlay(paperFlip);
+    },
     // There is no stop/restart control: only the server can start a paid performance.
     setBand(state) {
       if (state?.startedAt === band?.startedAt && state?.byID === band?.byID) return;
@@ -190,9 +221,11 @@ export function createAudio({ serverNow, onBlocked }) {
       try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch { /* Storage unavailable. */ }
       if (muted) {
         music.pause(); bandMusic.pause(); ambience.pause(); slotReel.pause(); slotPayout.pause(); slotWin.pause(); slotFail.pause();
+        holdingPaper.pause(); paperFlip.pause();
       } else {
         spatial.unlock().then(ready => onBlocked?.(!ready));
         unlocked = true; tryPlay(ambience); startMusic(); startBand(); startSlotReel();
+        startReading();
       }
       return muted;
     },

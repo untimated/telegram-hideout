@@ -4,7 +4,7 @@ import { createAudio } from './public/js/audio.js';
 import { SLOTS } from './public/js/game/slots.js';
 import { BAND } from './public/js/game/catalog.js';
 
-function setup(t, spatial = false) {
+function setup(t, spatial = false, unlock = true) {
   const sounds = new Map();
   const events = new Map();
   const original = Object.fromEntries(['Audio', 'AudioContext', 'document', 'localStorage'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -43,14 +43,75 @@ function setup(t, spatial = false) {
   }
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 10000 });
   const audio = createAudio({ serverNow: () => Date.now() });
-  events.get('pointerdown')();
+  if (unlock) events.get('pointerdown')();
   const reel = sounds.get('/sfx/slot-reel.mp3');
   const payout = sounds.get('/sfx/slot-payout.mp3');
   const win = sounds.get('/sfx/casino-win.mp3');
   const fail = sounds.get('/sfx/trumpet-fail.mp3');
   const spin = (id, award = 15, age = 0) => ({ id, startedAt: Date.now() - age, payout: award });
-  return { audio, reel, payout, win, fail, spin, routes, band: sounds.get(`/music/${BAND.id}.mp3`), music: sounds.get(undefined) };
+  return { audio, reel, payout, win, fail, spin, routes, events,
+    holding: sounds.get('/sfx/holding-paper.mp3'), flip: sounds.get('/sfx/paper-flip.mp3'),
+    band: sounds.get(`/music/${BAND.id}.mp3`), music: sounds.get(undefined) };
 }
+
+test('paper holding loops for one reading session and flips restart without layering', t => {
+  const { audio, holding, flip } = setup(t);
+  assert.equal(holding.loop, true);
+  assert.equal(holding.plays, 0);
+  audio.setReading(true);
+  audio.flipPaper();
+  assert.equal(holding.plays, 1);
+  assert.equal(flip.plays, 1);
+  assert.equal(flip.currentTime, .24, 'first grab skips the quiet lead-in');
+  holding.currentTime = 8;
+  flip.currentTime = .4;
+  audio.setReading(true);
+  audio.flipPaper();
+  assert.equal(holding.plays, 1, 'changing a story must not restart the holding loop');
+  assert.equal(holding.currentTime, 8);
+  assert.equal(flip.currentTime, .24, 'each story change starts at the same trimmed position');
+  assert.equal(flip.plays, 2);
+  audio.setReading(false);
+  assert.equal(holding.paused, true);
+  assert.equal(flip.paused, true);
+  assert.equal(holding.currentTime, 0);
+  audio.flipPaper();
+  assert.equal(flip.plays, 2, 'closed reader cannot play a flip');
+  audio.setReading(true);
+  assert.equal(holding.plays, 2);
+});
+
+test('muting paper sounds resumes only the holding loop if the reader remains open', t => {
+  const { audio, holding, flip } = setup(t);
+  audio.setReading(true);
+  audio.flipPaper();
+  audio.toggleMute();
+  assert.equal(holding.paused, true);
+  assert.equal(flip.paused, true);
+  audio.flipPaper();
+  assert.equal(flip.plays, 1);
+  audio.toggleMute();
+  assert.equal(holding.plays, 2);
+  assert.equal(flip.plays, 1, 'unmuting must not replay an old page turn');
+  audio.toggleMute();
+  audio.setReading(false);
+  audio.toggleMute();
+  assert.equal(holding.paused, true);
+  assert.equal(holding.plays, 2, 'closed reader stays silent after unmuting');
+});
+
+test('holding waits for a browser gesture and cannot revive after the reader closes', t => {
+  const { audio, holding, flip, events } = setup(t, false, false);
+  audio.setReading(true);
+  audio.flipPaper();
+  assert.equal(holding.plays, 0);
+  assert.equal(flip.plays, 0);
+  events.get('pointerdown')();
+  assert.equal(holding.plays, 1);
+  audio.setReading(false);
+  events.get('keydown')();
+  assert.equal(holding.paused, true);
+});
 
 test('jukebox music is routed to stereo, retaining local volume, distance and shared playback', t => {
   const { audio, music, routes } = setup(t, true);

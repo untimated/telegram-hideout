@@ -124,5 +124,14 @@
     ],
     "transparentFraction": 0.6,
     "pngBytes": 75174
+  },
+  {
+    "id": "coffee",
+    "originalSize": [
+      1254,
+      1254
+    ],
+    "transparentFraction": 0.71,
+    "pngBytes": 42085
   }
 ]

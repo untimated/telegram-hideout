@@ -25,6 +25,7 @@ export const MENUS = Object.freeze({
 
 // `days` limits an item to those weekdays (Hideout time); `special` puts it on the poster.
 export const ITEMS = Object.freeze([
+  { id: 'coffee', menu: 'bar', name: 'Coffee', price: 5, icon: '☕', drunk: -.1, fuel: .3, model: 'coffee' },
   { id: 'pint-of-beer', menu: 'bar', name: 'Pint of Beer', price: 20, icon: '🍺', drunk: .2, fuel: -.1, model: 'pint' },
   { id: 'highball', menu: 'bar', name: 'Highball', price: 30, icon: '🥃', drunk: .2, fuel: -.2, model: 'highball' },
   { id: 'mojito', menu: 'bar', name: 'Mojito', price: 40, icon: '🍹', drunk: .1, fuel: -.05, model: 'mojito' },

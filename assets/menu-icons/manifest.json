@@ -154,6 +154,17 @@
       "webp": "apple-juice.webp",
       "width": 256,
       "height": 256
+    },
+    {
+      "id": "coffee",
+      "label": "Coffee",
+      "category": "bar",
+      "provisional": false,
+      "file": "coffee.png",
+      "original": "originals/coffee.png",
+      "webp": "coffee.webp",
+      "width": 256,
+      "height": 256
     }
   ]
 }

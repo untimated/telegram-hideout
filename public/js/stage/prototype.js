@@ -1,10 +1,10 @@
 import { createStageContext } from './context.js';
-import { NEWSPAPER } from '../news.js';
+import { buildNewsstand } from './newsstand.js';
 
 // Add experimental props here. Move an approved prop's builder into a main-room area later.
 export function buildPrototypeStage(THREE, scene, options = {}) {
   const context = createStageContext(THREE, scene, options);
-  const { level, models, place, animators, interactable } = context;
+  const { level, models, place, animators } = context;
   level.name = 'PrototypeStage';
   const floor = place(models.RoomFloor(13, 13), 0, 0, 0);
   floor.userData.kind = 'floor';
@@ -16,14 +16,7 @@ export function buildPrototypeStage(THREE, scene, options = {}) {
   level.add(grid);
   const femaleRobot = place(models.FemaleRobot(), 0, 0, 0, Math.PI);
   animators.push(time => femaleRobot.userData.animate(time));
-  const rack = place(models.Newsstand(), 0, 0, 2);
-  interactable('newsstand', rack, { label: 'Read The Hideout Post', action: { type: 'newspaper' } });
-  rack.userData.papers.forEach((paper, index) => {
-    interactable(`newspaper:${NEWSPAPER.articles[index].id}`, paper, {
-      label: `Read · ${NEWSPAPER.articles[index].title}`,
-      action: { type: 'newspaper', article: NEWSPAPER.articles[index].id },
-    });
-  });
+  buildNewsstand(context, 0, 2);
   scene.add(new THREE.HemisphereLight(0xe4efff, 0x45403c, 2));
   const light = new THREE.DirectionalLight(0xffe3bb, 2);
   light.position.set(-3, 8, 4);

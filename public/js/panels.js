@@ -4,7 +4,7 @@ import { NPC_BY_ID, npcPresent, npcShifts } from './game/npcs.js';
 import { SEAT_BY_ID } from './game/seats.js';
 import { SLOTS, maxSlotBet, slotResultText } from './game/slots.js';
 import { MUSIC_STEPS } from './audio.js';
-import { NEWSPAPER } from './news.js';
+import { NEWSPAPER, newsArticle } from './news.js';
 import { buildNewspaper } from './newspaper.js';
 
 import { INTERACT_RANGE } from './interaction.js';
@@ -158,7 +158,7 @@ export function createGamePanels({ hud, game }) {
   let slotBet = SLOTS.minBet;
 
   function show({ key, kicker, title, build }, anchor = openedAt) {
-    if (current?.key === 'arcade') closePanel();
+    if (current?.key === 'arcade' || (current?.key === 'newspaper' && key !== 'newspaper')) closePanel();
     panel.classList.toggle('arcade-panel', key === 'arcade');
     panel.classList.toggle('newspaper-panel', key === 'newspaper');
     panelKicker.textContent = kicker ?? '';
@@ -174,7 +174,10 @@ export function createGamePanels({ hud, game }) {
   }
   function closePanel() {
     if (current?.key === 'arcade') game.endInspect?.();
-    if (current?.key === 'newspaper' && panel.contains(document.activeElement)) document.activeElement.blur();
+    if (current?.key === 'newspaper') {
+      game.audio.setReading(false);
+      if (panel.contains(document.activeElement)) document.activeElement.blur();
+    }
     panel.hidden = true;
     current = null;
     resetSlotRequest = () => {};
@@ -243,11 +246,16 @@ export function createGamePanels({ hud, game }) {
   function openNewspaper(article) {
     const anchor = openedAt;
     const select = id => {
+      const articleID = newsArticle(id).id;
+      const changed = current?.key !== 'newspaper' || current.article !== articleID;
       show({
         key: 'newspaper', kicker: 'A little reading for the room', title: NEWSPAPER.name,
-        build(body, foot) { buildNewspaper(body, foot, id, { element, button, select }); },
+        build(body, foot) { buildNewspaper(body, foot, articleID, { element, button, select }); },
       }, anchor);
+      current.article = articleID;
       panelBody.focus({ preventScroll: true });
+      game.audio.setReading(true);
+      if (changed) game.audio.flipPaper();
     };
     select(article);
   }
@@ -501,12 +509,12 @@ export function createGamePanels({ hud, game }) {
   function open(target) {
     if (!target || !(target.distance <= INTERACT_RANGE)) return;
     openedAt = target.point ? { x: target.point.x, z: target.point.z } : null;
+    const action = target.action ?? { type: target.id };
+    if (target.kind !== 'item' && target.kind !== 'player' && action.type === 'newspaper') return openNewspaper(action.article);
     game.audio.sfx('click');
     if (target.kind === 'item') return openItem(target.served);
     if (target.kind === 'player') return openPlayer(target.id);
-    const action = target.action ?? { type: target.id };
     if (action.type === 'arcade') return openArcade(target);
-    if (action.type === 'newspaper') return openNewspaper(action.article);
     if (action.type === 'menu') return openMenu(action.menu);
     if (action.type === 'npc') return openNpc(action.npc);
     if (action.type === 'jukebox') return openJukebox();

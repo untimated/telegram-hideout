@@ -65,6 +65,32 @@ test('vendors must be on shift', () => {
   assert.equal(self('a'), undefined);
 });
 
+test('bar coffee costs five coins, applies recovery when drunk, and clamps meters', () => {
+  const { game, everyone, self, notices } = setup();
+  game.join('a');
+  game.join('b');
+  game.handle('a', { type: 'restore', coins: 100, drunk: .4, fuel: .5, dayKey: '2026-10-03' });
+  game.handle('b', { type: 'restore', coins: 5, drunk: .05, fuel: .85, dayKey: '2026-10-03' });
+  game.handle('a', { type: 'buy', item: 'coffee' });
+  assert.deepEqual([self('a').coins, self('a').drunk, self('a').fuel], [95, .4, .5]);
+  const first = everyone.filter(message => message.type === 'item_added').at(-1).item;
+  assert.equal(first.item, 'coffee');
+  assert.match(first.spot, /^bar-/);
+  game.handle('a', { type: 'consume', id: first.id });
+  assert.deepEqual([self('a').drunk, self('a').fuel], [.3, .8]);
+  assert.ok(everyone.some(message => message.type === 'activity' && /Alice drank their ☕ Coffee/.test(message.text)));
+  game.handle('a', { type: 'consume', id: first.id });
+  assert.deepEqual([self('a').drunk, self('a').fuel], [.3, .8], 'one coffee cannot apply twice');
+  game.handle('b', { type: 'buy', item: 'coffee' });
+  const second = everyone.filter(message => message.type === 'item_added').at(-1).item;
+  assert.equal(self('b').coins, 0);
+  game.handle('b', { type: 'consume', id: second.id });
+  assert.deepEqual([self('b').drunk, self('b').fuel], [0, 1]);
+  game.handle('b', { type: 'buy', item: 'coffee' });
+  assert.match(notices('b').at(-1), /Not enough coins for Coffee/);
+  assert.equal(everyone.filter(message => message.type === 'item_added').length, 2);
+});
+
 test('passing out stops movement; hours and splashes bring players back', () => {
   const { clock, game, everyone, self } = setup();
   game.join('a');

@@ -37,6 +37,20 @@ export function createItemModels(THREE) {
   }
 
   const builders = {
+    coffee(root) {
+      const cup = material('coffee-cup', { color: 0xf6f1e8, roughness: .35, side: THREE.DoubleSide, flatShading: true });
+      const accent = solid(0xb65b75, .4);
+      // A shallow saucer, a tapered open cup, and a loop handle read from across the bar.
+      cylinder(root, .085, .072, .009, ceramic(), 0, 0, 0, 16);
+      cylinder(root, .041, .036, .008, ceramic(), .009, 0, 0, 16);
+      mesh(root, new THREE.CylinderGeometry(.055, .041, .1, 16, 1, true), cup, 0, .067, 0);
+      cylinder(root, .048, .038, .086, solid(0x352014, .22), .018, 0, 0, 16);
+      mesh(root, new THREE.TorusGeometry(.055, .004, 6, 16), ceramic(), 0, .117, 0).rotation.x = Math.PI / 2;
+      mesh(root, new THREE.TorusGeometry(.029, .006, 6, 16), ceramic(), .06, .073, 0);
+      mesh(root, new THREE.TorusGeometry(.0535, .0018, 4, 16), accent, 0, .107, 0).rotation.x = Math.PI / 2;
+      mesh(root, new THREE.TorusGeometry(.075, .0015, 4, 16), accent, 0, .01, 0).rotation.x = Math.PI / 2;
+      mesh(root, new THREE.TorusGeometry(.046, .0013, 4, 16), solid(0x995725, .45), 0, .1045, 0).rotation.x = Math.PI / 2;
+    },
     pint(root) {
       tumbler(root, .045, .15, 0xe0a126, .82);
       cylinder(root, .043, .043, .025, solid(0xfff6e6, .9), .125);

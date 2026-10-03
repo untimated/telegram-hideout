@@ -1,7 +1,9 @@
 import { FOUNTAIN } from './layout.js';
+import { buildNewsstand } from './newsstand.js';
 
 // Jukebox against the glass, café tables and the east lounge, and the refreshment island.
-export function buildLounge({ models, place, unlit, interactable, seatable }) {
+export function buildLounge(context) {
+  const { models, place, unlit, interactable, seatable } = context;
   const jukebox = place(models.Jukebox(), -6.2, 0, .9, Math.PI / 2);
   jukebox.scale.set(1, .85, .85);
   interactable('jukebox', jukebox, { label: 'Jukebox', approach: { x: -5.1, z: .9, yaw: Math.PI / 2 } });
@@ -32,4 +34,6 @@ export function buildLounge({ models, place, unlit, interactable, seatable }) {
     place(unlit(models.TableLamp()), fx + dx, .02, fz + dz).scale.setScalar(.7);
   }
   [[-3.5, -1.25], [-2.3, -1.25], [-.6, .05], [-.6, 1.25]].forEach(([x, z], index) => seatable(place(models.SquareSeat(), x, 0, z), [`cube-${index + 1}`]));
+  // Behind the fountain's east stools, marking the edge of the sofa lounge.
+  buildNewsstand(context, .15, .65, Math.PI / 2).scale.setScalar(.5);
 }

@@ -187,7 +187,8 @@ export function createHideoutServer(options = {}) {
     // slurp or bite when someone consumes an item.
     ...[['click', 'click(96K).mp3'], ['bell', 'soft-bell(96K).mp3'], ['slurp', 'slurp(96K).mp3'], ['bite', 'bite(96K).mp3'], ['footstep', 'footstep(96K).mp3'],
       ['slot-reel', 'slot-reel(96K).mp3'], ['slot-payout', 'slot-payout(96K).mp3'], ['casino-win', 'casino-win(96K).mp3'],
-      ['trumpet-fail', 'trumpet-fail(96K).mp3']].map(([id, file]) => [
+      ['trumpet-fail', 'trumpet-fail(96K).mp3'], ['holding-paper', 'holding-paper(96K).mp3'],
+      ['paper-flip', 'paper-filp(96K).mp3']].map(([id, file]) => [
       `/sfx/${id}.mp3`, staticAsset(`./assets/sfx/${file}`, 'audio/mpeg', 'public, max-age=86400'),
     ]),
   ]);
