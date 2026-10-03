@@ -320,6 +320,8 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
     // Joins and leaves can arrive while the shaders and first frame are warming.
     for (const id of actors.keys()) if (!players.has(id)) removePlayer(id);
     for (const player of players.values()) upsertPlayer(player);
+    // Login may have completed during warm-up, after the first local-player selection.
+    setLocalPlayer(getSelfID());
 
     const clock = new THREE.Clock();
     let nextHover = 0;

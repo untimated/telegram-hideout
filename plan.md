@@ -147,7 +147,7 @@ for now we just do two things
 
 # Backlog
 
-- [ ] **Spatial 3D sound for music** — Use the browser Web Audio API / Three.js
+- [x] **Spatial 3D sound for music** — Use the browser Web Audio API / Three.js
   `PositionalAudio` for the jukebox and live band. Place sound sources at the jukebox
   and stage, with the listener following the camera's position and orientation.
   Add directional sound and distance falloff while preserving shared playback timing,
