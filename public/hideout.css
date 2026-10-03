@@ -671,3 +671,72 @@ button, input { font: inherit; }
   min-height: 0;
   max-height: calc(100% - 280px - var(--safe-bottom));
 }
+
+/* Printed-paper styling for the prototype reader; the usual panel lifecycle still applies. */
+.game-panel.newspaper-panel {
+  --paper-ink: #382e29;
+  --paper-muted: #65574b;
+  top: calc(var(--safe-top) + 24px); left: 50%; right: auto;
+  width: min(820px, calc(100% - 48px)); min-height: 0;
+  max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 48px);
+  transform: translateX(-50%);
+  border: 1px solid #998771; border-radius: 2px;
+  color: var(--paper-ink); background-color: #ece0c8;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.09' filter='url(%23grain)'/%3E%3C/svg%3E"), radial-gradient(ellipse at 35% 20%, #fff9e680, #b6996b25);
+  box-shadow: 0 20px 70px #0009, 0 0 0 100vmax #08071280;
+  z-index: 12; animation: none;
+}
+.newspaper-panel .panel-head {
+  position: relative; flex: none; display: block;
+  margin: 25px 30px 0; padding: 16px 0 8px;
+  border-top: 7px double var(--paper-ink); border-bottom: 7px double var(--paper-ink);
+  text-align: center;
+}
+.newspaper-panel .panel-kicker { color: var(--paper-muted); font: 700 10px/1.4 Arial, sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+.newspaper-panel .panel-title { margin: 4px 0 0; color: var(--paper-ink); font: 900 clamp(35px, 6.1vw, 72px)/1.05 Impact, 'Arial Narrow', sans-serif; letter-spacing: -.025em; text-transform: uppercase; overflow-wrap: normal; }
+.newspaper-panel .panel-close { position: absolute; top: -16px; right: -19px; width: 38px; height: 38px; border: 1px solid #8c7966; border-radius: 50%; background: #ece0c8; color: var(--paper-ink); font-size: 25px; }
+.newspaper-panel .panel-body { display: block; padding: 0 30px 20px; scrollbar-width: thin; scrollbar-color: #8e7a60 #dfceb0; }
+.newspaper-meta { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--paper-ink); font: 700 10px/1.4 Arial, sans-serif; letter-spacing: .045em; text-transform: uppercase; }
+.newspaper-section { padding: 13px 0 9px; border-bottom: 7px double var(--paper-ink); font: 400 clamp(26px, 4.7vw, 52px)/1.05 Georgia, serif; text-transform: uppercase; text-align: center; letter-spacing: -.025em; }
+.newspaper-headline { margin: 22px 0 10px; font: 700 clamp(28px, 3.8vw, 42px)/1.03 Georgia, serif; letter-spacing: -.03em; }
+.newspaper-deck { margin: 0 0 12px; font: italic 18px/1.4 Georgia, serif; }
+.newspaper-credits { margin: 0 0 18px; color: var(--paper-muted); font: 700 10px/1.5 Arial, sans-serif; text-transform: uppercase; letter-spacing: .03em; }
+.newspaper-columns { display: grid; grid-template-columns: .85fr 1.15fr; gap: 25px; }
+.newspaper-paragraph { margin: 0 0 15px; font: 17px/1.5 Georgia, 'Times New Roman', serif; }
+.newspaper-dropcap::first-letter { float: left; padding: 3px 5px 0 0; font-size: 57px; line-height: .8; }
+.newspaper-takeaway { margin: 25px 0 0; padding: 16px 12px; border: 2px solid var(--paper-ink); font: 20px/1.12 Georgia, serif; text-align: center; text-transform: uppercase; }
+.newspaper-figure { margin: 0 0 17px; }
+.newspaper-figure img { display: block; width: 100%; height: auto; border: 2px solid var(--paper-ink); }
+.newspaper-figure figcaption { margin: 5px 0 0; color: var(--paper-muted); font: italic 11px/1.35 Georgia, serif; }
+.newspaper-figure figcaption a { color: var(--paper-ink); text-underline-offset: 2px; }
+.newspaper-source { border-top: 1px solid #8c7966; padding-top: 13px; font: 11px/1.5 Arial, sans-serif; }
+.newspaper-source p { margin: 0 0 5px; color: var(--paper-muted); }
+.newspaper-source-link { display: inline-block; padding: 7px 0; color: var(--paper-ink); font-weight: 700; text-underline-offset: 3px; }
+.newspaper-panel .panel-foot { display: block; flex: none; margin: 0 30px 20px; padding: 14px 0 0; border-top: 7px double var(--paper-ink); }
+.newspaper-navigation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.newspaper-choice { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 7px 10px; border: 0; border-right: 1px solid #9b8872; border-radius: 0; background: transparent; color: var(--paper-ink); font: 700 13px/1.2 Georgia, serif; text-align: left; cursor: pointer; }
+.newspaper-choice:last-child { border-right: 0; }
+.newspaper-choice[aria-current] { background: #382e29; color: #f3e8d0; }
+.newspaper-choice-number { font: 700 11px Arial, sans-serif; }
+.newspaper-page-number { margin: 10px 0 0; color: var(--paper-muted); text-align: center; font: 10px/1.4 Arial, sans-serif; text-transform: uppercase; letter-spacing: .08em; }
+.newspaper-panel :is(button, a):focus-visible { outline: 2px solid var(--paper-ink); outline-offset: 3px; }
+@media (hover: hover) { .newspaper-choice:not([aria-current]):hover { background: #ad90662b; } }
+@media (max-width: 620px) {
+  .game-panel.newspaper-panel { top: calc(var(--safe-top) + 12px); width: calc(100% - 24px); max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 24px); }
+  .newspaper-panel .panel-head { margin: 22px 18px 0; padding-top: 12px; }
+  .newspaper-panel .panel-title { font-size: clamp(28px, 7.7vw, 46px); }
+  .newspaper-panel .panel-close { right: -8px; }
+  .newspaper-panel .panel-body { padding: 0 18px 15px; }
+  .newspaper-meta { flex-wrap: wrap; justify-content: center; font-size: 9px; gap: 4px 14px; }
+  .newspaper-columns { grid-template-columns: 1fr; gap: 20px; }
+  .newspaper-takeaway { margin-top: 15px; }
+  .newspaper-panel .panel-foot { margin: 0 18px 15px; padding-top: 10px; }
+  .newspaper-choice { flex-direction: column; align-items: flex-start; font-size: 11px; padding: 7px; gap: 3px; }
+}
+@media (max-height: 500px) {
+  .newspaper-panel .panel-head { margin-top: 15px; padding-top: 8px; }
+  .newspaper-panel .panel-title { font-size: 32px; }
+  .newspaper-panel .panel-kicker { display: none; }
+  .newspaper-panel .panel-foot { margin-bottom: 10px; padding-top: 6px; }
+  .newspaper-page-number { display: none; }
+}

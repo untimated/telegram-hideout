@@ -7,6 +7,7 @@ import { makeSession, readSession, readSessionToken, sessionCookie, verifyInitDa
 import { createAvatarLoader } from './avatars.js';
 import { SPAWN_AREA, WALK_SPEED } from './public/js/config.js';
 import { MAPS, mapFromQuery } from './public/js/maps.js';
+import { NEWSPAPER } from './public/js/news.js';
 import { AMBIENCE_FILE, BAND, ITEM_BY_ID, SONGS } from './public/js/game/catalog.js';
 import { createGame } from './game.js';
 
@@ -163,6 +164,9 @@ export function createHideoutServer(options = {}) {
   const menuIconURLs = Object.fromEntries(menuIcons.map(icon => [icon.id, `/menu-icons/${icon.name}`]));
   const staticAssets = new Map([
     ['/hideout.css', staticAsset('./public/hideout.css', 'text/css; charset=utf-8')],
+    ...NEWSPAPER.articles.map(article => [
+      article.photo.src, staticAsset(`./assets/news/${article.id}.jpg`, 'image/jpeg', 'public, max-age=86400'),
+    ]),
     ...listFiles('./public/js/').filter(file => file.endsWith('.js')).map(file => [
       file.replace('./public', ''), staticAsset(file, 'text/javascript; charset=utf-8'),
     ]),

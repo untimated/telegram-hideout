@@ -4,6 +4,8 @@ import { NPC_BY_ID, npcPresent, npcShifts } from './game/npcs.js';
 import { SEAT_BY_ID } from './game/seats.js';
 import { SLOTS, maxSlotBet, slotResultText } from './game/slots.js';
 import { MUSIC_STEPS } from './audio.js';
+import { NEWSPAPER } from './news.js';
+import { buildNewspaper } from './newspaper.js';
 
 import { INTERACT_RANGE } from './interaction.js';
 
@@ -158,8 +160,11 @@ export function createGamePanels({ hud, game }) {
   function show({ key, kicker, title, build }, anchor = openedAt) {
     if (current?.key === 'arcade') closePanel();
     panel.classList.toggle('arcade-panel', key === 'arcade');
+    panel.classList.toggle('newspaper-panel', key === 'newspaper');
     panelKicker.textContent = kicker ?? '';
     panelTitle.textContent = title;
+    panel.setAttribute('aria-label', title);
+    panelBody.tabIndex = key === 'newspaper' ? 0 : -1;
     panelBody.replaceChildren();
     panelFoot.replaceChildren();
     panel.hidden = false;
@@ -169,6 +174,7 @@ export function createGamePanels({ hud, game }) {
   }
   function closePanel() {
     if (current?.key === 'arcade') game.endInspect?.();
+    if (current?.key === 'newspaper' && panel.contains(document.activeElement)) document.activeElement.blur();
     panel.hidden = true;
     current = null;
     resetSlotRequest = () => {};
@@ -232,6 +238,18 @@ export function createGamePanels({ hud, game }) {
         return update;
       },
     });
+  }
+
+  function openNewspaper(article) {
+    const anchor = openedAt;
+    const select = id => {
+      show({
+        key: 'newspaper', kicker: 'A little reading for the room', title: NEWSPAPER.name,
+        build(body, foot) { buildNewspaper(body, foot, id, { element, button, select }); },
+      }, anchor);
+      panelBody.focus({ preventScroll: true });
+    };
+    select(article);
   }
 
   function vendorLine(menu) {
@@ -488,6 +506,7 @@ export function createGamePanels({ hud, game }) {
     if (target.kind === 'player') return openPlayer(target.id);
     const action = target.action ?? { type: target.id };
     if (action.type === 'arcade') return openArcade(target);
+    if (action.type === 'newspaper') return openNewspaper(action.article);
     if (action.type === 'menu') return openMenu(action.menu);
     if (action.type === 'npc') return openNpc(action.npc);
     if (action.type === 'jukebox') return openJukebox();

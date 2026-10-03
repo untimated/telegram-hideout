@@ -37,8 +37,7 @@ cancel a paid spin. The HUD deducts the bet immediately and adds the secured
 prize when the final reel stops, including when reconnecting during a spin.
 The saved wallet keeps the full secured balance. All bar players see the
 same animated result; the machine accepts one spin every 3.2 seconds. Moving,
-dragging, closing the panel, or pressing Escape returns to first person. The
-prototype room is empty again.
+dragging, closing the panel, or pressing Escape returns to first person.
 The reel recording starts 2.34 seconds into the file, just before the lever
 attack, and stops when the last reel
 lands. Winning results play the casino-win cue and coin-payout sound together;
@@ -52,7 +51,26 @@ largest. Decorations use two reusable mesh batches and do not intercept clicks.
 For browser testing with debug guest access enabled, use
 `/hideout?map=prototype&guest=1`. Map bounds and spawn areas are defined in
 `public/js/maps.js` and shared by client and server. Main-room food, seats and
-jukebox and live band actions are unavailable in the empty prototype room.
+jukebox and live band actions are unavailable in the prototype room.
+
+The prototype contains the female robot and a café newspaper rack in front of the
+spawn area. Walk up, tap a paper or aim and press E to read it. The first edition has
+exactly three handpicked Reader's Digest Canada stories (castles versus palaces,
+Canadian geography, and Bonaire's flamingos). The 3D papers and newspaper-style
+reading panel share their headlines from `public/js/news.js`. The panel has short
+Hideout summaries, processed real photographs, source links, three story
+selectors and a layout that stacks on phones. Close it with × or Escape; walking
+away also closes it. Reader's Digest RSS currently returns HTTP 403 from the
+development environment, so this edition is a fixed selection, not an automatic feed.
+
+The photos are credited Wikimedia Commons pictures of the same subjects, not images
+from Reader's Digest. Small JPEG copies live in `assets/news/` and are served from
+`/news-photos/`, avoiding cross-origin canvas restrictions. `public/js/news-photo.js`
+crops each photo and applies warm monochrome, contrast, print dots and grain once
+per page session. The reader uses a generated base64 PNG; the 3D paper uses the
+same processed canvas. Loading failures retain the original drawn illustrations.
+Photo source URLs and credits live in `public/js/news.js`; reuse licenses and
+the modifications are recorded in `assets/news/README.md` and reader captions.
 
 To announce each successful Telegram login in the group, configure the sibling
 TelegramBot service with `HIDEOUT_NOTIFICATION_CHAT_ID` (one negative group ID)

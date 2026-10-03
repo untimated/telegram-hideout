@@ -580,6 +580,7 @@ const keyDirection = {
 document.addEventListener('keydown', event => {
   if (ui.isLoading()) return;
   const targetElement = event.target instanceof Element ? event.target : null;
+  if (targetElement?.closest('.newspaper-panel')) return;
   const textEntry = targetElement?.closest('input, textarea, select, [contenteditable="true"]');
   const control = targetElement?.closest('button, a');
   if (event.key === 'Enter' && !textEntry && !control && !input.disabled &&
