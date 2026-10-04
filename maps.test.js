@@ -128,10 +128,10 @@ test('prototype wallet storage cannot overwrite the main wallet', async t => {
   globalThis.localStorage = { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) };
   const main = createWalletStore();
   const prototype = createWalletStore('prototype');
-  main.save('1', { coins: 77 });
-  prototype.save('1', { coins: 500 });
-  assert.deepEqual(await main.load('1'), { coins: 77 });
-  assert.deepEqual(await prototype.load('1'), { coins: 500 });
+  main.save('1', { coins: 77, spent: 1250, visits: 12, lastVisitAt: 1800000000000 });
+  prototype.save('1', { coins: 500, spent: 0 });
+  assert.deepEqual(await main.load('1'), { coins: 77, spent: 1250, visits: 12, lastVisitAt: 1800000000000 });
+  assert.deepEqual(await prototype.load('1'), { coins: 500, spent: 0 });
   assert.ok(storage.has('hideout.wallet.1'));
   assert.ok(storage.has('hideout.wallet.prototype.1'));
   const cloudKeys = [];

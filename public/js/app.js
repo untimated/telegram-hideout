@@ -9,6 +9,7 @@ import { BAND, ITEM_BY_ID, isDrink } from './game/catalog.js';
 import { SEAT_BY_ID } from './game/seats.js';
 import { slotDisplayCoins } from './game/slots.js';
 import { createWalletStore } from './wallet-store.js';
+import { moveCommand, saveGuestMove, takeGuestMove } from './chat-commands.js';
 
 const guestMode = new URLSearchParams(location.search).get('guest') === '1';
 const map = mapFromQuery(new URLSearchParams(location.search).get('map'));
@@ -37,6 +38,8 @@ const game = {
   jukebox: null,
   band: null,
   arcade: null,
+  spenders: [],
+  visitors: [],
   sleepers: new Set(),
   seated: new Map(), // playerID -> seat id
   icons: {},
@@ -78,10 +81,14 @@ function refreshCash() {
 }
 
 function setSelf(state) {
-  game.self = { coins: state.coins, drunk: state.drunk, fuel: state.fuel, asleep: state.asleep,
+  game.self = { coins: state.coins, spent: state.spent ?? 0, dayKey: state.dayKey, drunk: state.drunk, fuel: state.fuel, asleep: state.asleep,
+    visits: state.visits ?? 0, lastVisitAt: state.lastVisitAt ?? null,
     pendingSlotPayout: state.pendingSlotPayout ?? null };
   if (state.asleep) stopAllMovement();
-  if (walletLoaded) walletStore.save(selfID, { coins: state.coins, drunk: state.drunk, fuel: state.fuel, dayKey: state.dayKey });
+  if (walletLoaded) walletStore.save(selfID, {
+    coins: state.coins, spent: game.self.spent, visits: game.self.visits, lastVisitAt: game.self.lastVisitAt,
+    drunk: state.drunk, fuel: state.fuel, dayKey: state.dayKey,
+  });
   refreshCash();
 }
 
@@ -118,6 +125,9 @@ async function applyGameSnapshot(snapshot) {
   game.jukebox = snapshot.jukebox;
   game.band = snapshot.band ?? null;
   game.arcade = snapshot.arcade ?? null;
+  game.spenders = snapshot.spenders ?? [];
+  game.visitors = snapshot.visitors ?? [];
+  world?.setRankings(game.spenders, game.visitors);
   world?.setSlotSpin(game.arcade, serverNow());
   audio.setSlotSpin(game.arcade);
   game.icons = snapshot.icons ?? {};
@@ -146,6 +156,9 @@ const moveLabel = {
 };
 let socket;
 let guestSessionToken;
+if (guestMode) {
+  try { guestSessionToken = takeGuestMove(sessionStorage); } catch { /* Storage unavailable. */ }
+}
 let world;
 let selfID;
 const playerState = new Map();
@@ -185,6 +198,26 @@ function queueOrientation() {
 
 function sendChat(text) {
   if (!text || socket?.readyState !== WebSocket.OPEN) return false;
+  const command = moveCommand(text, location.href);
+  if (command) {
+    if (command.error) {
+      panels.toast(command.error, 'error');
+      return true;
+    }
+    if (command.map.id === map.id) {
+      panels.toast(`You are already in ${map.label}.`, 'ok');
+      return true;
+    }
+    if (guestMode) {
+      try { saveGuestMove(sessionStorage, guestSessionToken); } catch {
+        panels.toast('Room switching needs session storage to keep your guest identity.', 'error');
+        return true;
+      }
+    }
+    stopAllMovement();
+    location.assign(command.url);
+    return true;
+  }
   socket.send(JSON.stringify({ type: 'chat', text }));
   return true;
 }
@@ -247,6 +280,7 @@ async function startThree() {
     });
     world?.items.reset([...game.items.values()]);
     world?.setSlotSpin(game.arcade, serverNow());
+    world?.setRankings(game.spenders, game.visitors);
     for (const id of game.sleepers) world?.setAsleep(id, true);
     for (const [id, seat] of game.seated) world?.setSeat(id, SEAT_BY_ID.get(seat));
     await world?.ready;
@@ -376,36 +410,38 @@ async function connect() {
   telegram?.ready();
   telegram?.expand();
   ui.setStatus(guestMode ? 'Checking debug guest access…' : 'Checking Telegram access…');
-  let response;
-  try {
-    response = guestMode ? await fetch(`${location.origin}/auth/guest${mapQuery}`, {
-      method: 'POST',
-      credentials: 'same-origin',
-    }) : await fetch(`${location.origin}/auth${mapQuery}`, {
+  if (!guestMode || !guestSessionToken) {
+    let response;
+    try {
+      response = guestMode ? await fetch(`${location.origin}/auth/guest${mapQuery}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      }) : await fetch(`${location.origin}/auth${mapQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify({ initData: telegram.initData }),
       });
-  } catch {
-    ui.setStatus('Could not reach Hideout. Retrying…', 'error');
-    setTimeout(connect, 5000);
-    return;
-  }
-  if (!response.ok) {
-    ui.setStatus(guestMode && response.status === 401 ? 'Guest credentials rejected. Reload and try again.' :
-      response.status === 403 ? 'This account is not in an allowed group.' :
-      response.status === 401 ? 'Telegram login could not be verified. Reopen Hideout.' :
-      'Could not check group membership. Reopen Hideout.', 'error');
-    return;
-  }
-
-  if (guestMode) {
-    const login = await response.json();
-    guestSessionToken = login.guestToken;
-    if (!guestSessionToken) {
-      ui.setStatus('Guest login did not return a session. Reload Hideout.', 'error');
+    } catch {
+      ui.setStatus('Could not reach Hideout. Retrying…', 'error');
+      setTimeout(connect, 5000);
       return;
+    }
+    if (!response.ok) {
+      ui.setStatus(guestMode && response.status === 401 ? 'Guest credentials rejected. Reload and try again.' :
+        response.status === 403 ? 'This account is not in an allowed group.' :
+        response.status === 401 ? 'Telegram login could not be verified. Reopen Hideout.' :
+        'Could not check group membership. Reopen Hideout.', 'error');
+      return;
+    }
+
+    if (guestMode) {
+      const login = await response.json();
+      guestSessionToken = login.guestToken;
+      if (!guestSessionToken) {
+        ui.setStatus('Guest login did not return a session. Reload Hideout.', 'error');
+        return;
+      }
     }
   }
 
@@ -458,6 +494,11 @@ async function connect() {
       }
     } else if (message.type === 'self') {
       setSelf(message);
+    } else if (message.type === 'leaderboard') {
+      game.spenders = message.spenders;
+      game.visitors = message.visitors;
+      world?.setRankings(game.spenders, game.visitors);
+      panels.refresh();
     } else if (message.type === 'notice') {
       panels.slotRejected();
       panels.toast(message.text, message.tone);
@@ -507,6 +548,7 @@ async function connect() {
     }
   };
   socket.onclose = () => {
+    guestSessionToken = undefined;
     panels.closePanel();
     audio.setSlotSpin(null);
     clearTimeout(orientationTimer);

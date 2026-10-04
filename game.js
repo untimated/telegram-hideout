@@ -36,7 +36,7 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
   const selfState = wallet => {
     const state = {
       type: 'self', coins: wallet.coins, drunk: wallet.drunk, fuel: wallet.fuel, asleep: isAsleep(wallet),
-      dayKey: wallet.dayKey,
+      dayKey: wallet.dayKey, spent: wallet.spent, visits: wallet.visits, lastVisitAt: wallet.lastVisitAt,
     };
     if (wallet.pendingSlotPayout && now() < wallet.pendingSlotPayout.revealAt) {
       state.pendingSlotPayout = wallet.pendingSlotPayout;
@@ -54,7 +54,7 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     let wallet = wallets.get(playerID);
     if (!wallet) {
       const time = hideoutTime(now());
-      wallet = { coins: STARTING_COINS, ...FRESH_VITALS, dayKey: time.dayKey, hourKey: time.hourKey, restorable: true, splashedAt: -Infinity };
+      wallet = { coins: STARTING_COINS, spent: 0, visits: 0, lastVisitAt: null, ...FRESH_VITALS, dayKey: time.dayKey, hourKey: time.hourKey, restorable: true, splashedAt: -Infinity };
       wallets.set(playerID, wallet);
     }
     return wallet;
@@ -64,15 +64,53 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
   function update(playerID, change) {
     const wallet = walletFor(playerID);
     const wasAsleep = isAsleep(wallet);
+    const spent = wallet.spent;
+    const visits = wallet.visits;
     change(wallet);
     wallet.restorable = false;
     send(playerID, selfState(wallet));
+    if (wallet.spent !== spent || wallet.visits !== visits) broadcast(leaderboard());
     const asleep = isAsleep(wallet);
     if (asleep) stand(playerID);
     if (asleep !== wasAsleep) {
       broadcast({ type: 'player_state', id: playerID, asleep });
       broadcast({ type: 'activity', text: asleep ? `${getName(playerID)} passed out 💤` : `${getName(playerID)} is back on their feet` });
     }
+  }
+
+  // Only joined human players have a saved name; guests use the same wallet path.
+  // Keep that name after disconnecting so offline spenders stay on the board.
+  function topSpenders() {
+    return ranking('spent');
+  }
+
+  function topVisitors() {
+    return ranking('visits');
+  }
+
+  function ranking(metric) {
+    return [...wallets].filter(([id, wallet]) => wallet.name && wallet[metric] > 0 && !NPC_BY_ID.has(id))
+      .map(([id, wallet]) => ({ id, name: wallet.name, [metric]: wallet[metric] }))
+      .sort((a, b) => b[metric] - a[metric] || a.id.localeCompare(b.id))
+      .slice(0, 5);
+  }
+
+  function leaderboard() {
+    return { type: 'leaderboard', spenders: topSpenders(), visitors: topVisitors() };
+  }
+
+  // A visit is a main-room entry on a new Hideout day (01:00 boundary).
+  function visit(playerID, wallet, time) {
+    if (mapID !== 'main' || NPC_BY_ID.has(playerID)) return;
+    if (wallet.lastVisitAt === null || hideoutTime(wallet.lastVisitAt).dayKey !== time.dayKey) {
+      wallet.visits = Math.min(Number.MAX_SAFE_INTEGER, wallet.visits + 1);
+    }
+    wallet.lastVisitAt = now();
+  }
+
+  function spend(wallet, amount) {
+    wallet.coins -= amount;
+    wallet.spent = Math.min(Number.MAX_SAFE_INTEGER, wallet.spent + amount);
   }
 
   function snapshot(playerID) {
@@ -84,6 +122,8 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
       jukebox,
       band,
       arcade,
+      spenders: topSpenders(),
+      visitors: topVisitors(),
       sleepers: [...online].filter(id => isAsleep(walletFor(id))),
       seated: Object.fromEntries(seated),
     };
@@ -92,7 +132,9 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
   function join(playerID) {
     online.add(playerID);
     const wallet = walletFor(playerID);
+    wallet.name = getName(playerID);
     const time = hideoutTime(now());
+    visit(playerID, wallet, time);
     if (wallet.dayKey !== time.dayKey) startDay(wallet, time);
     // Hours spent offline do not count against the meters.
     wallet.hourKey = time.hourKey;
@@ -147,16 +189,30 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
 
   function restore(playerID, message) {
     const wallet = walletFor(playerID);
-    if (!wallet.restorable) return;
-    const { coins, drunk, fuel, dayKey } = message;
+    if (!wallet.restorable) {
+      send(playerID, selfState(wallet));
+      return;
+    }
+    const { coins, drunk, fuel, dayKey, spent = 0, visits = 0, lastVisitAt = null } = message;
     if (!Number.isSafeInteger(coins) || coins < 0 || coins > MAX_COINS) return;
     if (![drunk, fuel].every(value => typeof value === 'number' && value >= 0 && value <= 1)) return;
     if (typeof dayKey !== 'string' || dayKey.length > 16) return;
+    if (!Number.isSafeInteger(spent) || spent < 0) return;
+    if (!Number.isSafeInteger(visits) || visits < 0) return;
+    if (lastVisitAt !== null && (!Number.isSafeInteger(lastVisitAt) || lastVisitAt < 0 || lastVisitAt > now())) return;
     const time = hideoutTime(now());
     wallet.coins = coins;
     if (dayKey === time.dayKey) Object.assign(wallet, { drunk, fuel });
     else startDay(wallet, time);
-    update(playerID, () => {});
+    update(playerID, wallet => {
+      wallet.spent = spent;
+      if (mapID === 'main' && !NPC_BY_ID.has(playerID)) {
+        // join() already counted today's entry. A same-day backup includes it;
+        // a previous-day backup needs exactly one additional visit, never missed days.
+        const extra = lastVisitAt === null || hideoutTime(lastVisitAt).dayKey !== time.dayKey ? 1 : 0;
+        wallet.visits = Math.max(wallet.visits, Math.min(Number.MAX_SAFE_INTEGER, visits + extra));
+      }
+    });
   }
 
   function buy(playerID, itemID) {
@@ -176,7 +232,7 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     const spot = SPOTS[menu.spots].find(candidate => !taken.has(candidate.id));
     if (!spot) return notice(playerID, `Every ${menu.spots} spot is full. Finish something first!`);
 
-    update(playerID, wallet => { wallet.coins -= item.price; });
+    update(playerID, wallet => spend(wallet, item.price));
     const served = {
       id: String(++nextItemID), item: item.id, spot: spot.id, x: spot.x, y: spot.y, z: spot.z,
       byID: playerID, by: getName(playerID), at: now(),
@@ -208,7 +264,7 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     if (!near(playerID, JUKEBOX.x, JUKEBOX.z, JUKEBOX.reach)) return notice(playerID, 'Walk up to the jukebox.');
     if (band && now() < band.startedAt + BAND.duration * 1000) return notice(playerID, 'Let the live band finish first.');
     if (wallet.coins < song.price) return notice(playerID, `Not enough coins for ${song.title}.`);
-    update(playerID, wallet => { wallet.coins -= song.price; });
+    update(playerID, wallet => spend(wallet, song.price));
     jukebox = { song: song.id, startedAt: now(), byID: playerID, by: getName(playerID) };
     broadcast({ type: 'jukebox', jukebox });
     broadcast({ type: 'activity', text: `${jukebox.by} put on ♪ ${song.title}` });
@@ -232,7 +288,7 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     if (!BAND.members.every(id => npcPresent(id, hideoutTime(now())))) return notice(playerID, 'The band is off shift. Come back later.');
     if (wallet.coins < BAND.price) return notice(playerID, `You need ${BAND.price} coins for live music.`);
     band = { startedAt: now(), byID: playerID, by: getName(playerID) };
-    update(playerID, wallet => { wallet.coins -= BAND.price; });
+    update(playerID, wallet => spend(wallet, BAND.price));
     broadcast({ type: 'band', band });
     broadcast({ type: 'activity', text: `${band.by} paid for a live song ♪` });
   }
@@ -249,7 +305,8 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     arcade = { ...rollSlots(bet, random), bet, id: ++nextSpinID, byID: playerID, by: getName(playerID), startedAt: now() };
     // Settle once on the server, even if the player disconnects during the reel animation.
     update(playerID, wallet => {
-      wallet.coins = wallet.coins - bet + arcade.payout;
+      spend(wallet, bet);
+      wallet.coins += arcade.payout;
       // Include the reveal time in the wallet update, which arrives before the reel event.
       wallet.pendingSlotPayout = arcade.payout > 0
         ? { amount: arcade.payout, revealAt: arcade.startedAt + SLOTS.duration } : null;
@@ -338,5 +395,5 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
     }
   }
 
-  return { join, leave, handle, tick, canMove, snapshot, stand, cheat };
+  return { join, leave, handle, tick, canMove, snapshot, stand, cheat, topSpenders, topVisitors, leaderboard };
 }

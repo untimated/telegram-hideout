@@ -6,7 +6,7 @@ import { SLOTS, maxSlotBet, slotResultText } from './game/slots.js';
 import { MUSIC_STEPS } from './audio.js';
 import { NEWSPAPER, newsArticle } from './news.js';
 import { buildNewspaper } from './newspaper.js';
-import { LEADERBOARD_PREVIEW } from './leaderboard-preview.js';
+import { leaderboardRankings } from './leaderboard.js';
 
 import { INTERACT_RANGE } from './interaction.js';
 
@@ -510,20 +510,36 @@ export function createGamePanels({ hud, game }) {
       kicker: 'Hideout',
       title: 'Leaderboard',
       build(body, foot) {
-        for (const ranking of LEADERBOARD_PREVIEW) {
-          body.append(element('h3', 'leaderboard-heading', ranking.title));
-          const list = element('div', 'menu-list');
-          ranking.entries.forEach((entry, index) => {
-            const row = element('div', 'menu-row');
-            const info = element('div', 'menu-info');
-            info.append(element('div', 'menu-name', entry.name));
-            const rank = ['🥇', '🥈', '🥉'][index] ?? String(index + 1);
-            row.append(element('span', 'menu-icon', rank), info, element('span', 'menu-sub', `${entry.value} ${ranking.metric.toLowerCase()}`));
-            list.append(row);
-          });
-          body.append(list);
-        }
-        foot.append(element('p', 'panel-note', 'Appearance preview · Example rankings'));
+        const draw = () => {
+          body.replaceChildren();
+          const { spenders, visitors } = game.state();
+          for (const ranking of leaderboardRankings(spenders, visitors)) {
+            body.append(element('h3', 'leaderboard-heading', ranking.title));
+            const list = element('div', 'menu-list');
+            if (!ranking.entries.length) list.append(element('p', 'panel-note', ranking.empty));
+            ranking.entries.forEach((entry, index) => {
+              const row = element('div', 'menu-row');
+              const info = element('div', 'menu-info');
+              info.append(element('div', 'menu-name', entry.name));
+              const rank = ['🥇', '🥈', '🥉'][index] ?? String(index + 1);
+              row.append(element('span', 'menu-icon', rank), info, element('span', 'menu-sub', `${entry.value} ${ranking.metric.toLowerCase()}`));
+              list.append(row);
+            });
+            body.append(list);
+          }
+        };
+        let previous;
+        let previousVisitors;
+        const update = () => {
+          const { spenders, visitors } = game.state();
+          if (previous === spenders && previousVisitors === visitors) return;
+          previous = spenders;
+          previousVisitors = visitors;
+          draw();
+        };
+        update();
+        foot.append(element('p', 'panel-note', 'Total coins spent · Visits count once per Hideout day (starts at 1am)'));
+        return update;
       },
     });
   }

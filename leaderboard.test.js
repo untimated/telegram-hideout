@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { drawBulletinBoard, drawLeaderboardSign } from './public/js/models/leaderboard-art.js';
 import { buildLeaderboard } from './public/js/stage/leaderboard.js';
 
-function createMockDocument() {
+function createMockDocument(text = []) {
   const dummyGrad = { addColorStop() {} };
   const mockContext = {
     fillRect() {},
@@ -21,7 +21,7 @@ function createMockDocument() {
     rotate() {},
     createRadialGradient: () => dummyGrad,
     createLinearGradient: () => dummyGrad,
-    fillText() {},
+    fillText(value) { text.push(value); },
     strokeText() {},
   };
   return {
@@ -49,6 +49,28 @@ test('drawBulletinBoard and drawLeaderboardSign generate textures with matching 
     const sign = drawLeaderboardSign();
     assert.equal(sign.width, 1024);
     assert.equal(sign.height, 384);
+  } finally {
+    if (previousDoc === undefined) delete globalThis.document;
+    else globalThis.document = previousDoc;
+  }
+});
+
+test('board redraws server rankings on the same canvas without sample NPC names', () => {
+  const previousDoc = globalThis.document;
+  const text = [];
+  globalThis.document = createMockDocument(text);
+  try {
+    const board = drawBulletinBoard();
+    assert.ok(text.includes('No spending yet'));
+    text.length = 0;
+    assert.equal(drawBulletinBoard([{ id: 'guest', name: 'Guest 1', spent: 1250 }], [{ id: 'guest', name: 'Guest 1', visits: 12 }], board), board);
+    assert.ok(text.includes('GUEST 1'));
+    assert.ok(text.includes('1,250'));
+    assert.ok(text.includes('TOTAL SPENT'));
+    assert.ok(text.includes('12'));
+    assert.ok(text.includes('ONCE PER HIDEOUT DAY'));
+    assert.ok(!text.includes('SAMANTHA'));
+    assert.ok(!text.includes('EXAMPLE RANKINGS'));
   } finally {
     if (previousDoc === undefined) delete globalThis.document;
     else globalThis.document = previousDoc;

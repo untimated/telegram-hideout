@@ -231,6 +231,23 @@ Where the pieces live:
 - `game.js` is the authoritative server side: wallets and moods, served items, the jukebox,
   transfers and hourly/daily ticks. Wallets live in memory; after a server restart each player's
   first `restore` message (their localStorage copy) is accepted once.
+- Top Spenders tracks cumulative coins spent on food, drinks, jukebox songs, live music and
+  the full slot bet, regardless of payout. Transfers, daily refills and admin balance changes
+  do not count. The server sends the top five in the welcome snapshot and broadcasts live
+  rankings to every map. Both boards display main-room spending; guests qualify,
+  NPCs do not, and disconnected players retain their rank for the server's lifetime.
+  `spent` is backed up with each player's wallet in Telegram CloudStorage/localStorage.
+  After a restart, saved totals reappear as players reconnect; older backups start at zero.
+  Like the existing balance restore, this backup is client-supplied, not a tamper-proof ledger.
+  Persistent server storage is still needed to retain the complete leaderboard across restarts
+  and multiple server instances.
+- Top Visitors accumulates one visit per Hideout day, starting at 01:00 in the shared Hideout
+  time zone. Main-room entries save `visits` and the latest `lastVisitAt` timestamp with the
+  wallet; repeated logins, extra tabs and returns from prototype on the same day do not add
+  another visit. Missing days do not count. A same-day backup restores its count as-is;
+  a backup from an earlier visit adds only today's entry. Guests qualify and NPCs do not.
+  The main-room leaderboard stands in the old painting space near the entrance; the abstract
+  painting now hangs on the east wall above the stage. The prototype retains its preview board.
 - `public/js/interaction.js` raycasts taps against `level.userData.interactables`, served items
   and other players; `public/js/panels.js` is the HUD (meters, menus, modals, toasts);
   `public/js/items.js` builds the served food and drink models; `public/js/audio.js` plays the
@@ -252,12 +269,17 @@ Where the pieces live:
 
 Socket messages on top of move/orientation/chat: the client sends `buy`, `consume`,
 `jukebox_play`, `jukebox_stop`, `band_play`, `transfer`, `splash` and `restore`; the server sends `self` (your
-coins and mood), `item_added`, `item_removed`, `jukebox`, `band`, `player_state` (asleep), `notice`
+coins, cumulative spending, visits and mood), `leaderboard` (top spenders and visitors), `item_added`, `item_removed`, `jukebox`, `band`, `player_state` (asleep), `notice`
 (to one player) and `activity` (a line in everyone's chat log). `welcome` carries a `game`
 snapshot.
 
 Debug guests can preview another hour's NPCs and specials with `&hour=14` in the URL. This is
 view only: the server still sells by real Hideout time.
+
+Type `/move prototype` in chat to switch to the prototype room, or `/move main` to return to
+Gossip Bar. Room switching reloads the page and keeps the current guest identity through
+sessionStorage; each room retains its separate wallet. These commands are handled locally
+and do not appear in other players' chat.
 
 ## Performance
 

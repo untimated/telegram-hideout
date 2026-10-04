@@ -1,4 +1,5 @@
-// The client's backup copy of its wallet (coins, drunk, fuel, day). The server is the source of
+// The client's backup copy of its wallet, including spending, visits and last visit time.
+// The server is the source of
 // truth; after a server restart it accepts this copy once (see game.js restore). Inside Telegram
 // the copy lives in Telegram CloudStorage (per user, survives reinstalls and follows the account
 // across devices); elsewhere, and as a fallback, in localStorage.

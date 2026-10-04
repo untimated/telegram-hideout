@@ -1,5 +1,5 @@
 // 2D Canvas illustration textures for the Gossip Jackpot Leaderboard bulletin board.
-import { LEADERBOARD_PREVIEW } from '../leaderboard-preview.js';
+import { leaderboardRankings } from '../leaderboard.js';
 function canvas(width, height) {
   const surface = document.createElement('canvas');
   surface.width = width;
@@ -367,8 +367,7 @@ function drawJukeboxCard(ctx, x, y, width, height) {
   ctx.restore();
 }
 
-export function drawBulletinBoard() {
-  const surface = canvas(1024, 768);
+export function drawBulletinBoard(spenders = [], visitors = [], surface = canvas(1024, 768)) {
   const ctx = surface.getContext('2d');
 
   // 1. Natural Cork Board Texture
@@ -393,8 +392,9 @@ export function drawBulletinBoard() {
   ctx.fillRect(0, 0, 1024, 768);
 
   // Two equally prominent pinned sheets share the existing board.
-  drawRankingSheet(ctx, LEADERBOARD_PREVIEW[0], 52, 64, 440, 640, '#173631');
-  drawRankingSheet(ctx, LEADERBOARD_PREVIEW[1], 532, 64, 440, 640, '#73334f');
+  const rankings = leaderboardRankings(spenders, visitors);
+  drawRankingSheet(ctx, rankings[0], 52, 64, 440, 640, '#173631');
+  drawRankingSheet(ctx, rankings[1], 532, 64, 440, 640, '#73334f');
   return surface;
 }
 
@@ -485,6 +485,13 @@ function drawRankingSheet(ctx, ranking, sheetX, sheetY, sheetW, sheetH, accent) 
   const rowStartY = sheetY + 184;
   const rowSpacing = 88;
 
+  if (!ranking.entries.length) {
+    ctx.fillStyle = '#857762';
+    ctx.font = `24px ${fontSerif}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(ranking.empty, sheetX + sheetW / 2, rowStartY);
+  }
+
   ranking.entries.forEach((entry, idx) => {
     const rowY = rowStartY + idx * rowSpacing;
     const rank = idx + 1;
@@ -530,7 +537,7 @@ function drawRankingSheet(ctx, ranking, sheetX, sheetY, sheetW, sheetH, accent) 
   ctx.fillStyle = '#857762';
   ctx.font = 'bold 15px Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('EXAMPLE RANKINGS', sheetX + sheetW / 2, sheetY + sheetH - 36);
+  ctx.fillText(ranking.note, sheetX + sheetW / 2, sheetY + sheetH - 36);
 
   // Brass tacks holding the center sheet
   drawTack(ctx, sheetX + 16, sheetY + 16, 7);

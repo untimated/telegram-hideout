@@ -266,6 +266,7 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       endInspect: endShowcase,
       isInspecting: () => Boolean(showcase?.focus),
       setSlotSpin: (spin, time) => slotAnimator?.setSpin(spin, time),
+      setRankings: (spenders, visitors) => stage.userData.interactables.find(entry => entry.id === 'leaderboard')?.object.userData.setRankings?.(spenders, visitors),
       consume(id, itemID) {
         consumption.start(actors.get(id), itemID, clock.elapsedTime);
       },

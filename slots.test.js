@@ -72,7 +72,8 @@ test('server pays each award once, ignores client payout claims, and shares mach
     const { game, events, advance } = setup('main', chance);
     game.handle('a', { type: 'arcade_spin', bet, payout: 9999, symbols: ['gossip', 'gossip', 'gossip'] });
     assert.equal(game.snapshot('a').self.coins, 100 - bet + payout);
-    assert.equal(events[0].spin.bet, bet);
+    const spinEvent = events.find(event => event.type === 'arcade_spin');
+    assert.equal(spinEvent.spin.bet, bet);
     assert.equal(game.snapshot('b').self.coins, 100);
     assert.equal(events.filter(event => event.type === 'arcade_spin').length, 1);
     game.handle('a', { type: 'arcade_spin', bet });
@@ -80,7 +81,7 @@ test('server pays each award once, ignores client payout claims, and shares mach
     assert.equal(events.filter(event => event.type === 'arcade_spin').length, 1);
     game.leave('a');
     assert.equal(game.join('a').self.coins, 100 - bet + payout);
-    assert.deepEqual(game.join('b').arcade, events[0].spin);
+    assert.deepEqual(game.join('b').arcade, spinEvent.spin);
     game.handle('a', { type: 'restore', coins: 9999, drunk: 0, fuel: 1, dayKey: game.snapshot('a').self.dayKey });
     assert.equal(game.snapshot('a').self.coins, 100 - bet + payout);
     advance();

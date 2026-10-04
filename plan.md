@@ -129,7 +129,13 @@ Arcade:
 
 
 Leaderboard
-  Top Spender among members
+- Top Spender
+    Simple accumulate over time, no weekly or monthly thing
+    guest can be registered just fine, no correctness enforced here, just overriden over an over
+  - Top Visits
+    record user visits (daily), multi relog in-a-day shouldn't counted
+  - Drunkest
+    no need for now, just empty
 
 
 # Mood / State

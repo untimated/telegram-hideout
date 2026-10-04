@@ -320,9 +320,11 @@ export function createHideoutServer(options = {}) {
     const orientationTimes = new Map();
 
     function broadcast(message, except) {
+      // Both boards show the main room's cumulative spending and daily visits.
+      if (message.type === 'leaderboard' && map.id !== 'main') return;
       const outgoing = JSON.stringify(message);
       for (const peer of sockets.clients) {
-        if (peer.mapID === map.id && peer !== except && peer.readyState === WebSocket.OPEN) peer.send(outgoing);
+        if ((peer.mapID === map.id || message.type === 'leaderboard') && peer !== except && peer.readyState === WebSocket.OPEN) peer.send(outgoing);
       }
     }
 
@@ -413,8 +415,13 @@ export function createHideoutServer(options = {}) {
     });
     client.playerID = playerID;
     players.set(playerID, player);
-    client.send(JSON.stringify({ type: 'welcome', selfID: playerID, players: [...players.values()], game: { ...game.join(playerID), icons: menuIconURLs } }));
+    const snapshot = game.join(playerID);
+    const { spenders, visitors } = rooms.get('main').game.leaderboard();
+    client.send(JSON.stringify({ type: 'welcome', selfID: playerID, players: [...players.values()], game: {
+      ...snapshot, spenders, visitors, icons: menuIconURLs,
+    } }));
     broadcast({ type: 'player_joined', player }, client);
+    if (map.id === 'main') broadcast(game.leaderboard(), client);
     const expiration = setTimeout(() => client.close(1008, 'Session expired'), Math.max(0, (session.exp - now()) * 1000));
     const membership = session.guest ? null : setInterval(async () => {
       try {

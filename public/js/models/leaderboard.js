@@ -92,6 +92,10 @@ export function createLeaderboardModel(t) {
   // Front Cork Board Plane with 2D Canvas Artwork
   const boardCanvas = drawBulletinBoard();
   const boardMap = texture(boardCanvas);
+  model.userData.setRankings = (spenders, visitors) => {
+    drawBulletinBoard(spenders, visitors, boardCanvas);
+    boardMap.needsUpdate = true;
+  };
   const boardMaterial = new THREE.MeshStandardMaterial({
     map: boardMap,
     roughness: 0.85,
