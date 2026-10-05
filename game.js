@@ -151,7 +151,7 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
   // position moves onto the seat; any walking stands them up again (see server.js).
   function sit(playerID, seatID) {
     const seat = SEAT_BY_ID.get(seatID);
-    if (!seat) return;
+    if (!seat || (seat.map ?? 'main') !== mapID) return notice(playerID, 'This fixture is not in this map.');
     if (isAsleep(walletFor(playerID))) return notice(playerID, 'You are passed out.');
     if (!near(playerID, seat.x, seat.z, USE_REACH)) return notice(playerID, `Walk closer to the ${seat.label.toLowerCase()}.`);
     const taken = [...seated].some(([id, other]) => other === seatID && id !== playerID) ||
@@ -345,7 +345,7 @@ export function createGame({ now = () => Date.now(), send, broadcast, getPositio
   // Handles one parsed client message. Returns false for message types this module does not own.
   function handle(playerID, message) {
     // Main-room fixtures do not exist in the prototype room.
-    if (mapID !== 'main' && ['buy', 'jukebox_play', 'jukebox_stop', 'band_play', 'sit'].includes(message?.type)) {
+    if (mapID !== 'main' && ['buy', 'jukebox_play', 'jukebox_stop', 'band_play'].includes(message?.type)) {
       notice(playerID, 'This fixture is not in this map.');
       return true;
     }

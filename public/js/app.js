@@ -56,6 +56,13 @@ const panels = createGamePanels({
     inspect: object => world?.inspect(object, Infinity),
     endInspect: () => world?.endInspect(),
     isInspecting: () => world?.isInspecting(),
+    stopMoving: stopAllMovement,
+    faceSeat(seat) {
+      yaw = seat.yaw;
+      pitch = -.1;
+      world?.setOrientation(selfID, yaw, pitch);
+      queueOrientation();
+    },
     serverNow,
   },
 });
@@ -501,6 +508,7 @@ async function connect() {
       panels.refresh();
     } else if (message.type === 'notice') {
       panels.slotRejected();
+      if (message.tone === 'error') panels.rouletteRejected();
       panels.toast(message.text, message.tone);
     } else if (message.type === 'activity') {
       ui.addSystemLine(message.text);

@@ -3,6 +3,7 @@
 // they face (camera convention: 0 faces -z). Must match the furniture placed in stage/bar.js and
 // stage/lounge.js. `npc` marks a seat an NPC uses during their shift.
 import { FOUNTAIN } from '../stage/layout.js';
+import { ROULETTE } from './roulette.js';
 
 const STOOL_TOP = .28 + .73; // bar platform + stool cushion
 const CHAIR_TOP = .51;
@@ -12,6 +13,10 @@ const CUBE_TOP = .475;
 const faceFountain = (x, z) => Math.atan2(-(FOUNTAIN.x - x), -(FOUNTAIN.z - z));
 
 export const SEATS = Object.freeze([
+  { id: ROULETTE.seatID, label: 'Roulette chair', kind: 'chair', map: ROULETTE.map,
+    x: ROULETTE.x + Math.sin(ROULETTE.yaw) * ROULETTE.seatZ,
+    z: ROULETTE.z + Math.cos(ROULETTE.yaw) * ROULETTE.seatZ,
+    y: ROULETTE.seatY, yaw: ROULETTE.yaw },
   ...[-4.6, -3.5, -2.4].map((x, index) => ({ id: `stool-front-${index + 1}`, label: 'Bar stool', kind: 'stool', x, z: -3, y: STOOL_TOP, yaw: 0 })),
   ...[-5.4, -4.6, -3.8].map((z, index) => ({ id: `stool-side-${index + 1}`, label: 'Bar stool', kind: 'stool', x: -1.1, z, y: STOOL_TOP, yaw: Math.PI / 2 })),
   ...[-4.8, -3.15].flatMap((z, row) => [

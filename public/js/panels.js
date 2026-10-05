@@ -7,6 +7,8 @@ import { MUSIC_STEPS } from './audio.js';
 import { NEWSPAPER, newsArticle } from './news.js';
 import { buildNewspaper } from './newspaper.js';
 import { leaderboardRankings } from './leaderboard.js';
+import { ROULETTE } from './game/roulette.js';
+import { buildRoulettePanel } from './roulette-panel.js';
 
 import { INTERACT_RANGE } from './interaction.js';
 
@@ -159,8 +161,9 @@ export function createGamePanels({ hud, game }) {
   let slotBet = SLOTS.minBet;
 
   function show({ key, kicker, title, build }, anchor = openedAt) {
-    if (current?.key === 'arcade' || (current?.key === 'newspaper' && key !== 'newspaper')) closePanel();
+    if (current?.key === 'arcade' || current?.key === 'roulette' || (current?.key === 'newspaper' && key !== 'newspaper')) closePanel();
     panel.classList.toggle('arcade-panel', key === 'arcade');
+    panel.classList.toggle('roulette-panel', key === 'roulette');
     panel.classList.toggle('newspaper-panel', key === 'newspaper');
     panelKicker.textContent = kicker ?? '';
     panelTitle.textContent = title;
@@ -169,19 +172,44 @@ export function createGamePanels({ hud, game }) {
     panelBody.replaceChildren();
     panelFoot.replaceChildren();
     panel.hidden = false;
-    const update = build(panelBody, panelFoot) ?? (() => {});
-    current = { key, update, anchor };
-    update();
+    const content = build(panelBody, panelFoot);
+    current = { key, anchor, ...(typeof content === 'function' ? { update: content } : content ?? { update() {} }) };
+    current.update();
   }
   function closePanel() {
-    if (current?.key === 'arcade') game.endInspect?.();
-    if (current?.key === 'newspaper') {
+    const previous = current;
+    current = null;
+    previous?.dispose?.();
+    if (previous?.key === 'arcade') game.endInspect?.();
+    if (previous?.key === 'newspaper') {
       game.audio.setReading(false);
       if (panel.contains(document.activeElement)) document.activeElement.blur();
     }
     panel.hidden = true;
-    current = null;
     resetSlotRequest = () => {};
+  }
+
+  function openRoulette(target, control) {
+    if (current?.key === 'roulette') return current.control(control);
+    const { self, selfID, seated } = game.state();
+    if (self.asleep) return toast('You are passed out.');
+    if ([...seated].some(([id, seat]) => seat === ROULETTE.seatID && id !== selfID)) return toast('Someone is sitting there.');
+    let machine = target.object;
+    while (machine && !machine.userData.roulette) machine = machine.parent;
+    if (!machine) return;
+    game.audio.sfx('click');
+    game.stopMoving?.();
+    show({
+      key: 'roulette', title: 'Roulette',
+      build: (body, foot) => buildRoulettePanel({
+        body, foot, game: { ...game, toast }, machine, close: closePanel,
+        setHeading(kicker, title) { panelKicker.textContent = kicker; panelTitle.textContent = title; },
+      }),
+    });
+    if (seated.get(selfID) !== ROULETTE.seatID && !game.send({ type: 'sit', seat: ROULETTE.seatID })) {
+      closePanel();
+      toast('Reconnect before taking the seat.');
+    }
   }
 
   function openArcade(target) {
@@ -552,6 +580,7 @@ export function createGamePanels({ hud, game }) {
     openedAt = target.point ? { x: target.point.x, z: target.point.z } : null;
     const action = target.action ?? { type: target.id };
     if (target.kind !== 'item' && target.kind !== 'player' && action.type === 'newspaper') return openNewspaper(action.article);
+    if (action.type === 'roulette' || action.type === 'roulette_control') return openRoulette(target, action.control);
     game.audio.sfx('click');
     if (target.kind === 'item') return openItem(target.served);
     if (target.kind === 'player') return openPlayer(target.id);
@@ -638,6 +667,7 @@ export function createGamePanels({ hud, game }) {
     useHovered: () => { if (hovered) open(hovered); },
     closePanel,
     slotRejected: () => resetSlotRequest(),
+    rouletteRejected: () => current?.key === 'roulette' && current.rejected(),
     setHover,
     refresh,
     toast,

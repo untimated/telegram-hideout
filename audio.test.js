@@ -50,9 +50,62 @@ function setup(t, spatial = false, unlock = true) {
   const fail = sounds.get('/sfx/trumpet-fail.mp3');
   const spin = (id, award = 15, age = 0) => ({ id, startedAt: Date.now() - age, payout: award });
   return { audio, reel, payout, win, fail, spin, routes, events,
+    rouletteButton: sounds.get('/sfx/roulette-button.mp3'),
+    rouletteSpin: sounds.get('/sfx/roulette-spin.mp3'),
+    rouletteMusic: sounds.get('/sfx/roulette-spin-bgm.mp3'),
     holding: sounds.get('/sfx/holding-paper.mp3'), flip: sounds.get('/sfx/paper-flip.mp3'),
     band: sounds.get(`/music/${BAND.id}.mp3`), music: sounds.get(undefined) };
 }
+
+test('roulette starts both spin tracks once, restarts button cues and stops everything on exit', t => {
+  const { audio, rouletteButton: button, rouletteSpin: spin, rouletteMusic: music } = setup(t);
+  assert.equal(audio.rouletteSpinDuration, 12565);
+  spin.duration = 12.564898;
+  assert.equal(audio.rouletteSpinDuration, 12564.898);
+  audio.pressRouletteButton();
+  button.currentTime = .3;
+  audio.pressRouletteButton();
+  assert.equal(button.plays, 2);
+  assert.equal(button.currentTime, 0);
+  audio.setRouletteSpin(true);
+  assert.equal(spin.plays, 1);
+  assert.equal(music.plays, 1);
+  t.mock.timers.tick(3000);
+  audio.setRouletteSpin(true);
+  assert.equal(spin.plays, 1, 'extra presses cannot restart the spin');
+  assert.equal(music.plays, 1);
+  audio.setRouletteSpin(false);
+  for (const sound of [button, spin, music]) {
+    assert.equal(sound.paused, true);
+    assert.equal(sound.currentTime, 0);
+  }
+  audio.setRouletteSpin(true);
+  assert.equal(spin.plays, 2, 'another round starts from the beginning');
+});
+
+test('roulette mute resumes both tracks at elapsed time and never revives a completed or closed spin', t => {
+  const { audio, rouletteButton: button, rouletteSpin: spin, rouletteMusic: music } = setup(t);
+  audio.setRouletteSpin(true);
+  t.mock.timers.tick(1000);
+  audio.toggleMute();
+  audio.pressRouletteButton();
+  assert.equal(button.plays, 0);
+  assert.equal(spin.paused, true);
+  assert.equal(music.paused, true);
+  t.mock.timers.tick(2000);
+  audio.toggleMute();
+  assert.equal(spin.currentTime, 3);
+  assert.equal(music.currentTime, 3);
+  assert.equal(spin.plays, 2);
+  audio.toggleMute();
+  t.mock.timers.tick(12565);
+  audio.toggleMute();
+  assert.equal(spin.plays, 2, 'expired spin cannot replay after unmuting');
+  audio.setRouletteSpin(false);
+  audio.toggleMute();
+  audio.toggleMute();
+  assert.equal(music.plays, 2, 'closed panel cannot revive its music');
+});
 
 test('paper holding loops for one reading session and flips restart without layering', t => {
   const { audio, holding, flip } = setup(t);

@@ -77,7 +77,7 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       lookPointer = undefined;
     }
     renderer.domElement.addEventListener('pointerdown', event => {
-      endShowcase();
+      if (!showcase?.object.userData.roulette) endShowcase();
       if (lookPointer || event.button !== 0) return;
       input.blur();
       lookPointer = { id: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, at: performance.now() };
@@ -86,6 +86,7 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
     });
     renderer.domElement.addEventListener('pointermove', event => {
       if (event.pointerId !== lookPointer?.id) return;
+      if (showcase?.object.userData.roulette) return;
       const current = getOrientation();
       let yaw = current.yaw - (event.clientX - lookPointer.x) * .005;
       yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
@@ -158,7 +159,8 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
     addDebug(`render: baked ${baked.merged} static meshes into ${baked.meshes}`, 'muted');
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
-    const picker = createPicker(THREE, { camera, canvas: renderer.domElement, level: stage, actors, getSelfID });
+    const picker = createPicker(THREE, { camera, getCamera: () => showcase?.focus ? showcaseCamera : camera,
+      canvas: renderer.domElement, level: stage, actors, getSelfID });
     const rim = createRimHighlight(THREE);
 
     function createPlayer(player) {
@@ -230,7 +232,7 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       if (!showcase) return;
       showcase.object.userData.showcased = false;
       showcase = null;
-      host.classList.remove('showcase');
+      host.classList.remove('showcase', 'roulette-inspect');
     }
 
     const world = {
@@ -250,18 +252,25 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       items: servedItems,
       // A short model inspection using the same camera as served-item showcases.
       inspect(object, duration = 6) {
-        const anchors = object.userData.slotMachine;
+        const anchors = object.userData.slotMachine ?? object.userData.roulette;
         if (!anchors) return;
         object.updateWorldMatrix(true, true);
+        const focus = anchors.cameraFocus.getWorldPosition(new THREE.Vector3());
+        const viewpoint = anchors.cameraPosition.getWorldPosition(new THREE.Vector3());
+        if (object.userData.roulette) {
+          // Leave the cabinet controls beside the desktop wizard and fit the wheel on phones.
+          if (host.clientWidth > 620) focus.copy(object.localToWorld(anchors.cameraFocus.position.clone().add(new THREE.Vector3(.3, 0, 0))));
+          viewpoint.sub(focus).multiplyScalar(Math.max(1, .75 / showcaseCamera.aspect)).add(focus);
+        }
         showcase = {
           object, start: clock.elapsedTime, duration,
-          focus: anchors.cameraFocus.getWorldPosition(new THREE.Vector3()),
-          viewpoint: anchors.cameraPosition.getWorldPosition(new THREE.Vector3()),
+          focus, viewpoint,
         };
         object.userData.showcased = true;
         rim.set(null);
         onHover?.(null);
         host.classList.add('showcase');
+        host.classList.toggle('roulette-inspect', Boolean(object.userData.roulette));
       },
       endInspect: endShowcase,
       isInspecting: () => Boolean(showcase?.focus),

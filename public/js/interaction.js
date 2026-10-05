@@ -8,7 +8,7 @@ const PICK_RANGE = 9;
 // many metres of the eye. That is exactly when the "E · …" hint and the rim light show.
 export const INTERACT_RANGE = 3;
 
-export function createPicker(THREE, { camera, canvas, level, actors, getSelfID }) {
+export function createPicker(THREE, { camera, getCamera = () => camera, canvas, level, actors, getSelfID }) {
   const raycaster = new THREE.Raycaster();
   raycaster.far = PICK_RANGE;
   const pointer = new THREE.Vector2();
@@ -43,16 +43,16 @@ export function createPicker(THREE, { camera, canvas, level, actors, getSelfID }
     return list;
   }
 
-  // Everything in the way counts as an occluder, so nothing is picked through a wall. Label and
-  // avatar sprites are skipped (they float above heads and would block the view).
+  // Solid meshes occlude clicks. Labels and grid/line helpers are decorative and do not block them.
   function pick(ndcX, ndcY) {
     pointer.set(ndcX, ndcY);
-    raycaster.setFromCamera(pointer, camera);
+    raycaster.setFromCamera(pointer, getCamera());
     const hits = raycaster.intersectObjects(roots(), true);
     for (const hit of hits) {
-      if (hit.object.isSprite || !visible(hit.object)) continue;
+      if (!hit.object.isMesh || !visible(hit.object)) continue;
       const target = describe(hit.object);
-      if (target) return { ...target, distance: hit.distance, point: hit.point };
+      // Inspection changes the picking view, while reach stays relative to the player's eye.
+      if (target) return { ...target, distance: camera.position.distanceTo(hit.point), point: hit.point };
       // Transparent glass and additive glows should not hide what is behind them.
       if (hit.object.material?.transparent) continue;
       return null;

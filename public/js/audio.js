@@ -1,5 +1,6 @@
 import { BAND, SONG_BY_ID } from './game/catalog.js';
 import { SLOTS } from './game/slots.js';
+import { ROULETTE } from './game/roulette.js';
 import { createSpatialAudio } from './spatial-audio.js';
 
 const JUKEBOX_POSITION = { x: -6.2, z: .9 };
@@ -38,6 +39,16 @@ export function createAudio({ serverNow, onBlocked }) {
   }
   let slot = null;
   let slotTimer;
+  const rouletteButton = new Audio('/sfx/roulette-button.mp3');
+  const rouletteSpin = new Audio('/sfx/roulette-spin.mp3');
+  const rouletteMusic = new Audio('/sfx/roulette-spin-bgm.mp3');
+  for (const [element, volume] of [[rouletteButton, .6], [rouletteSpin, .65], [rouletteMusic, .4]]) {
+    element.preload = 'auto';
+    spatial.addSource(element, { position: { x: ROULETTE.x, y: .8, z: ROULETTE.z }, volume, range: 8 });
+  }
+  let rouletteStartedAt = null;
+  const rouletteDuration = () => Number.isFinite(rouletteSpin.duration) && rouletteSpin.duration > 0
+    ? rouletteSpin.duration * 1000 : ROULETTE.spinDuration;
   const music = new Audio();
   music.preload = 'auto';
   let current = null;
@@ -131,6 +142,16 @@ export function createAudio({ serverNow, onBlocked }) {
     }
   }
 
+  function startRouletteSpin() {
+    if (rouletteStartedAt === null || !unlocked || muted) return;
+    const elapsed = (Date.now() - rouletteStartedAt) / 1000;
+    if (elapsed * 1000 >= rouletteDuration()) return;
+    for (const element of [rouletteSpin, rouletteMusic]) {
+      element.currentTime = elapsed;
+      tryPlay(element);
+    }
+  }
+
   function unlock() {
     spatial.unlock().then(ready => { if (!muted) onBlocked?.(!ready); });
     if (unlocked) return;
@@ -141,10 +162,32 @@ export function createAudio({ serverNow, onBlocked }) {
     startBand();
     startSlotReel();
     startReading();
+    startRouletteSpin();
   }
   for (const eventName of ['pointerdown', 'keydown']) document.addEventListener(eventName, unlock, { capture: true });
 
   return {
+    // Cabinet presses retrigger one cue; spamming never builds up overlapping copies.
+    pressRouletteButton() {
+      if (!unlocked || muted) return;
+      rouletteButton.currentTime = 0;
+      tryPlay(rouletteButton);
+    },
+    get rouletteSpinDuration() { return rouletteDuration(); },
+    // Local preview audio follows the seated panel lifetime and shares its result delay.
+    setRouletteSpin(active) {
+      if (active) {
+        if (rouletteStartedAt !== null) return;
+        rouletteStartedAt = Date.now();
+        startRouletteSpin();
+      } else {
+        rouletteStartedAt = null;
+        for (const element of [rouletteButton, rouletteSpin, rouletteMusic]) {
+          element.pause();
+          element.currentTime = 0;
+        }
+      }
+    },
     // Local reader sounds follow panel lifetime, independently of shared room music.
     setReading(active) {
       if (reading === active) return;
@@ -222,10 +265,12 @@ export function createAudio({ serverNow, onBlocked }) {
       if (muted) {
         music.pause(); bandMusic.pause(); ambience.pause(); slotReel.pause(); slotPayout.pause(); slotWin.pause(); slotFail.pause();
         holdingPaper.pause(); paperFlip.pause();
+        rouletteButton.pause(); rouletteSpin.pause(); rouletteMusic.pause();
       } else {
         spatial.unlock().then(ready => onBlocked?.(!ready));
         unlocked = true; tryPlay(ambience); startMusic(); startBand(); startSlotReel();
         startReading();
+        startRouletteSpin();
       }
       return muted;
     },
