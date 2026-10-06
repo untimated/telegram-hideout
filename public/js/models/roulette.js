@@ -15,7 +15,6 @@ export function createRouletteModel(t) {
   const padding = new THREE.MeshStandardMaterial({ color: 0x962c38, roughness: .7, metalness: .02 });
   const charcoal = new THREE.MeshStandardMaterial({ color: 0x24232a, roughness: .48, metalness: .3 });
   const light = new THREE.MeshStandardMaterial({ color: 0xffd995, emissive: 0xffb13b, emissiveIntensity: .8, roughness: .3 });
-  const green = new THREE.MeshStandardMaterial({ color: 0x26744f, roughness: .48, metalness: .12 });
 
   function extrude(parent, shape, material, depth, x, y, z, bevel = .008) {
     const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, {
@@ -118,12 +117,18 @@ export function createRouletteModel(t) {
   wheel.position.z = .063;
   face.add(wheel);
   disc(wheel, charcoal, .39, .025, 0);
+  // Pockets glow on their own so the wheel reads as lit from behind the glass, not as cabinet trim.
+  const pockets = {
+    red: new THREE.MeshStandardMaterial({ color: 0xb3202f, emissive: 0xe0283c, emissiveIntensity: .55, roughness: .38, metalness: .05 }),
+    black: new THREE.MeshStandardMaterial({ color: 0x14151c, emissive: 0x2c3352, emissiveIntensity: .5, roughness: .3, metalness: .2 }),
+    green: new THREE.MeshStandardMaterial({ color: 0x23885a, emissive: 0x1fb86a, emissiveIntensity: .5, roughness: .4, metalness: .05 }),
+  };
   const pocketCount = ROULETTE_POCKETS.length;
   const step = Math.PI * 2 / pocketCount;
   for (let index = 0; index < pocketCount; index++) {
     const angle = Math.PI / 2 + index * step;
     const pocket = new THREE.Mesh(new THREE.RingGeometry(.235, .385, 2, 1, angle - step / 2 + .01, step - .02),
-      { green, red, black: m.black }[ROULETTE_POCKETS[index]]);
+      pockets[ROULETTE_POCKETS[index]]);
     pocket.position.z = .019;
     pocket.receiveShadow = true;
     wheel.add(pocket);
