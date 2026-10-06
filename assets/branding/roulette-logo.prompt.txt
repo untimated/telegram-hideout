@@ -1,0 +1,8 @@
+Use case: logo-brand.
+Asset type: original logo artwork for the wide top marquee of a stylized low-poly roulette arcade cabinet.
+Primary request: design an elegant, immediately readable ROULETTE logo that suits a burgundy, black and aged-brass casino machine with warm amber bulbs.
+Text (verbatim): "ROULETTE" (R O U L E T T E). Only this word; no tagline, invented brand name, or extra text.
+Style: bold vintage casino / restrained Art Deco, simple clean illustrated forms, game-ready rather than photographic. Large custom uppercase serif lettering in warm ivory and muted gold, with a thin dark burgundy outline and subtle short dark offset shadow for readability on the machine's existing burgundy panel. A small stylized roulette wheel emblem to the left of the word: alternating burgundy and near-black wedge sectors, one deep green sector, brass ring, ivory ball. Keep emblem compact and lettering dominant. Small restrained gold flourish lines can integrate at either end.
+Composition: one single horizontal lockup centered, roughly 4:1 width-to-height, ample transparent padding, straight front view, crisp silhouette, strong readability even at small game texture size. The whole logo stays compact enough to fit a short wide marquee.
+Background: genuinely transparent alpha, no solid rectangle or plaque. No machine, environment, presentation sheet, mockup, perspective, watermark, extra versions, heavy glow, tiny decorative text, or excessively intricate filigree.
+Color palette: warm ivory #F5DF9A, antique gold #BE914A, burgundy #741F2C, near-black #16171A, deep green #286049.

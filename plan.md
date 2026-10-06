@@ -71,13 +71,16 @@ Player is given 100 coin per day to spend, value will carry over if saved
 persist it in local storage if possible, but if mini app (telegram webvie) can't, just limit per session
 
 ## Trading
-we can provide transfer coin as well for our poor friends
-open modal: 
-------------------
-  Cash [inhand] 
-  Amount [value]
-Transfer | Cancel
-------------------
+
+    we can provide transfer coin as well for our poor friends
+
+    open modal: 
+    ------------------
+
+      Cash [inhand] 
+      Amount [value]
+        Transfer | Cancel
+    ------------------
 
 ## Goods
 I'll provide the icon later, use default first

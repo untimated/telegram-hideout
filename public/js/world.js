@@ -264,7 +264,7 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
         }
         showcase = {
           object, start: clock.elapsedTime, duration,
-          focus, viewpoint,
+          focus, viewpoint, width: viewWidth, height: viewHeight,
         };
         object.userData.showcased = true;
         rim.set(null);
@@ -456,6 +456,9 @@ export async function createWorld({ host, input, players, getSelfID, getOrientat
       }
       let view = camera;
       if (showcase && (!showcase.object.parent || isLocallyMoving() || clock.elapsedTime - showcase.start > (showcase.duration ?? SHOWCASE_SECONDS))) endShowcase();
+      if (showcase?.object.userData.roulette && (showcase.width !== viewWidth || showcase.height !== viewHeight)) {
+        world.inspect(showcase.object, showcase.duration);
+      }
       if (showcase) {
         if (showcase.focus) {
           showcaseCamera.position.copy(showcase.viewpoint);

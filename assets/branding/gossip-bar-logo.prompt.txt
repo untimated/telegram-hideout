@@ -1,0 +1,10 @@
+Generated with the built-in image_gen tool; transparent_background: true.
+
+Use case: logo-brand.
+Asset type: transparent PNG wordmark for the Gossip Bar game's top-left HUD and larger loading screen.
+Primary request: Create an original "Gossip Bar" logo blending Vice City inspired 1980s Miami neon nightlife with a sleek cyberpunk bar sign.
+Text (verbatim): "Gossip Bar". Spell Gossip G-o-s-s-i-p, Bar B-a-r. No other text.
+Style: polished bold flowing retro brush-script lettering with hot pink neon, subtle violet dimensional edging and restrained electric cyan highlights; a clean cyan neon underline that ends in a short angular cyberpunk flourish. Bold readable strokes, clear word separation, readable as a 180-pixel-wide HUD logo. Warm playful nightlife atmosphere, not distressed.
+Composition: compact horizontal wordmark, approximately 3:1 overall silhouette, centered and occupying most of the canvas with just enough padding for a restrained glow. "Gossip" and "Bar" on one line; both words clearly legible. Lettering is the design; no extra illustrations or scenery.
+Background: genuinely transparent alpha, no backdrop plate, no black rectangle, no checkerboard drawn into the image.
+Constraints: original lettering, do not reproduce an existing game's exact logo. No slogan, no icons, no watermark, no mockup. Keep glow tight and translucent so it overlays a dark blue game room cleanly.

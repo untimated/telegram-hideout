@@ -51,8 +51,10 @@ function setup(t, spatial = false, unlock = true) {
   const spin = (id, award = 15, age = 0) => ({ id, startedAt: Date.now() - age, payout: award });
   return { audio, reel, payout, win, fail, spin, routes, events,
     rouletteButton: sounds.get('/sfx/roulette-button.mp3'),
+    rouletteCoin: sounds.get('/sfx/roulette-coin.mp3'),
     rouletteSpin: sounds.get('/sfx/roulette-spin.mp3'),
     rouletteMusic: sounds.get('/sfx/roulette-spin-bgm.mp3'),
+    rouletteWin: sounds.get('/sfx/roulette-win.mp3'), rouletteFail: sounds.get('/sfx/roulette-fail.mp3'),
     holding: sounds.get('/sfx/holding-paper.mp3'), flip: sounds.get('/sfx/paper-flip.mp3'),
     band: sounds.get(`/music/${BAND.id}.mp3`), music: sounds.get(undefined) };
 }
@@ -81,6 +83,54 @@ test('roulette starts both spin tracks once, restarts button cues and stops ever
   }
   audio.setRouletteSpin(true);
   assert.equal(spin.plays, 2, 'another round starts from the beginning');
+});
+
+test('roulette coin clicks retrigger at the cabinet and respect unlock, mute and exit', t => {
+  const { audio, rouletteCoin: coin, routes, events } = setup(t, true, false);
+  audio.addRouletteCoin();
+  assert.equal(coin.plays, 0);
+  events.get('pointerdown')();
+  assert.ok(routes.some(route => route.element === coin));
+  audio.addRouletteCoin();
+  coin.currentTime = .3;
+  audio.addRouletteCoin();
+  assert.equal(coin.plays, 2);
+  assert.equal(coin.currentTime, 0);
+  audio.toggleMute();
+  assert.equal(coin.paused, true);
+  audio.addRouletteCoin();
+  audio.toggleMute();
+  assert.equal(coin.plays, 2, 'unmuting never replays a coin click');
+  audio.addRouletteCoin();
+  audio.setRouletteSpin(false);
+  assert.equal(coin.paused, true);
+  assert.equal(coin.currentTime, 0);
+});
+
+test('roulette outcomes use their own cabinet emitter and clear on mute, next bet and exit', t => {
+  const { audio, rouletteWin: win, rouletteFail: fail, payout, routes } = setup(t, true);
+  assert.ok(routes.some(route => route.element === win));
+  assert.ok(routes.some(route => route.element === fail));
+  audio.setRouletteResult(true);
+  assert.equal(win.plays, 1);
+  assert.equal(fail.plays, 0);
+  assert.equal(payout.plays, 0, 'the slot machine has its own playback element');
+  audio.setRouletteResult(false);
+  assert.equal(win.paused, true);
+  assert.equal(fail.plays, 1);
+  audio.toggleMute();
+  assert.equal(fail.paused, true);
+  audio.setRouletteResult(true);
+  audio.toggleMute();
+  assert.equal(win.plays, 1, 'unmuting does not replay a muted result');
+  audio.setRouletteResult(true);
+  audio.setRouletteResult(null);
+  assert.equal(win.paused, true);
+  assert.equal(win.currentTime, 0);
+  audio.setRouletteResult(false);
+  audio.setRouletteSpin(false);
+  assert.equal(fail.paused, true);
+  assert.equal(fail.currentTime, 0);
 });
 
 test('roulette mute resumes both tracks at elapsed time and never revives a completed or closed spin', t => {

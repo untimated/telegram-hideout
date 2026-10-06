@@ -16,7 +16,7 @@ const map = mapFromQuery(new URLSearchParams(location.search).get('map'));
 if (!map) throw new Error('Unknown map');
 const MOVEMENT_BOUNDS = map.bounds;
 const mapQuery = `?map=${encodeURIComponent(map.id)}`;
-document.querySelector('.room-name').textContent = map.label;
+if (map.id !== 'main') document.querySelector('.room-name').textContent = map.label;
 document.title = `${map.label} · Hideout`;
 const ui = createHUD({ guestMode, onMessage: sendChat, onMessageFocus: stopAllMovement });
 

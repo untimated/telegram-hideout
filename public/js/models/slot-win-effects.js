@@ -1,6 +1,7 @@
 // A small reusable mesh pool: two draw calls, no textures, physics, or particle library.
 const MAX_PIECES = 32;
-export function createSlotWinEffects(THREE) {
+// Burst origin in the owner's local space: half-width of the launch line, its height and front.
+export function createSlotWinEffects(THREE, { width = .3, y = 1.25, z = .56 } = {}) {
   const object = new THREE.Group();
   object.name = 'SlotWinEffects';
   object.userData.dynamic = true;
@@ -35,18 +36,18 @@ export function createSlotWinEffects(THREE) {
       const size = age < path.delay ? 0 : Math.min(1, time * 12, (life - time) * 3);
       // Coins fan up and out from the two sides of the payline, then tumble down.
       const side = index % 2 ? 1 : -1;
-      pose.position.set(side * (.3 + path.speed * time * strength),
-        1.25 + path.lift * time * strength - .8 * time * time,
-        .56 + (.1 + Math.abs(path.x) * .17) * time);
+      pose.position.set(side * (width + path.speed * time * strength),
+        y + path.lift * time * strength - .8 * time * time,
+        z + (.1 + Math.abs(path.x) * .17) * time);
       pose.rotation.set(Math.PI / 2 + time * (3 + index % 3), time * (2 + index % 4), path.x + time * 2);
       pose.scale.setScalar(size * (1 + index % 3 * .12));
       pose.updateMatrix();
       coins.setMatrixAt(index, pose.matrix);
 
       // Bright diamond sparkles rise around the reel frame and marquee.
-      pose.position.set(path.x * (.46 + time * .28 * strength),
-        1.15 + index % 4 * .18 + time * (.5 + path.lift * .25),
-        .58 + Math.cos(index * 1.7) * .06);
+      pose.position.set(path.x * (width + .16 + time * .28 * strength),
+        y - .1 + index % 4 * .18 + time * (.5 + path.lift * .25),
+        z + .02 + Math.cos(index * 1.7) * .06);
       pose.rotation.set(time * 2, time * 3, time * 2 + index);
       pose.scale.set(1, 1.8, .6).multiplyScalar(size * (.7 + .3 * Math.sin(time * 15 + index) ** 2));
       pose.updateMatrix();

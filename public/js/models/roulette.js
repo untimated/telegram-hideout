@@ -1,4 +1,7 @@
-import { ROULETTE } from '../game/roulette.js';
+import { ROULETTE, ROULETTE_POCKETS } from '../game/roulette.js';
+import { createRouletteEffects } from './roulette-effects.js';
+import { createRouletteLights } from './roulette-lights.js';
+import { createSlotWinEffects } from './slot-win-effects.js';
 
 // Pachinko-inspired roulette cabinet with a fixed chair. Floor origin, cabinet front +Z.
 // This is the visual prototype; the wheel, ball and buttons are ready for later interaction.
@@ -115,12 +118,12 @@ export function createRouletteModel(t) {
   wheel.position.z = .063;
   face.add(wheel);
   disc(wheel, charcoal, .39, .025, 0);
-  const pocketCount = 25;
+  const pocketCount = ROULETTE_POCKETS.length;
   const step = Math.PI * 2 / pocketCount;
   for (let index = 0; index < pocketCount; index++) {
     const angle = Math.PI / 2 + index * step;
     const pocket = new THREE.Mesh(new THREE.RingGeometry(.235, .385, 2, 1, angle - step / 2 + .01, step - .02),
-      index === 0 ? green : index % 2 ? red : m.black);
+      { green, red, black: m.black }[ROULETTE_POCKETS[index]]);
     pocket.position.z = .019;
     pocket.receiveShadow = true;
     wheel.add(pocket);
@@ -138,19 +141,21 @@ export function createRouletteModel(t) {
   }
   disc(wheel, m.brass, .057, .035, .063);
   sphere(wheel, m.brass, .035, 0, 0, .105, 1);
-  label(wheel, '0', .034, .042, 0, .315, .028, { background: '#26744f', size: 100, canvasWidth: 128 });
 
   const ball = group('RouletteBall');
   ball.userData.dynamic = true;
   ball.position.set(.294, -.294, .106);
   sphere(ball, m.porcelain, .023, 0, 0, 0, 1);
   face.add(ball);
+  const effects = createRouletteEffects(THREE);
+  face.add(effects.object);
+  const wheelBulbs = [];
   for (let index = 0; index < 12; index++) {
     const angle = index * Math.PI / 6;
     const x = Math.cos(angle) * .476;
     const y = Math.sin(angle) * .476;
     sphere(face, m.brass, .022, x, y, .051, 1);
-    sphere(face, light, .016, x, y, .068, 1);
+    wheelBulbs.push([x, y, .068]);
   }
   // A light transparent cover keeps the wheel readable and adds the pachinko glass face.
   const glass = new THREE.Mesh(new THREE.CircleGeometry(.436, 64), new THREE.MeshStandardMaterial({
@@ -164,10 +169,32 @@ export function createRouletteModel(t) {
   // Raised marquee and warm lamps echo the approved cabinet concept.
   extrude(cabinet, roundedShape(1.06, .235, .04), m.brass, .045, 0, 1.94, .218);
   extrude(cabinet, roundedShape(.99, .18, .025), red, .012, 0, 1.94, .272, .004);
-  label(cabinet, 'ROULETTE', .82, .135, 0, 1.94, .29);
+  const logoTexture = new THREE.TextureLoader().load('/branding/roulette-logo.png');
+  logoTexture.colorSpace = THREE.SRGBColorSpace;
+  logoTexture.anisotropy = 8;
+  // Ignore the PNG's empty top/bottom padding through UVs, preserving the original asset.
+  const logoWidth = .82, imageWidth = 2172, imageHeight = 724, cropTop = 120, cropBottom = 588;
+  logoTexture.repeat.set(1, (cropBottom - cropTop) / imageHeight);
+  logoTexture.offset.set(0, (imageHeight - cropBottom) / imageHeight);
+  const logo = new THREE.Mesh(
+    new THREE.PlaneGeometry(logoWidth, logoWidth * (cropBottom - cropTop) / imageWidth),
+    new THREE.MeshStandardMaterial({
+      map: logoTexture, emissiveMap: logoTexture, emissive: 0xffffff, emissiveIntensity: .35,
+      transparent: true, depthWrite: false, roughness: .6,
+    }),
+  );
+  logo.name = 'RouletteLogo';
+  logo.position.set(0, 1.94, .29);
+  cabinet.add(logo);
+  const signBulbs = [];
   for (const side of [-1, 1]) {
-    for (const y of [1.898, 1.978]) sphere(cabinet, light, .024, side * .463, y, .297, 1);
+    for (const y of [1.898, 1.978]) signBulbs.push([side * .463, y, .297]);
   }
+  const lighting = createRouletteLights(THREE, { face, cabinet, wheelBulbs, signBulbs });
+  // The slot machine's coin splash, launched from both sides of the wheel. It sits on the
+  // model rather than the cabinet so the win squash does not distort the coins.
+  const winEffects = createSlotWinEffects(THREE, { width: .5, y: 1.35, z: .45 });
+  model.add(winEffects.object);
 
   const deck = group('RouletteControls');
   // Leave clearance below the wheel rim, including the backs of the raised buttons.
@@ -278,8 +305,8 @@ export function createRouletteModel(t) {
     return object;
   };
   const seatAnchor = anchor('RouletteSeatAnchor', 0, ROULETTE.seatY, ROULETTE.seatZ);
-  const cameraFocus = anchor('RouletteCameraFocus', 0, 1.10, .33);
-  const cameraPosition = anchor('RouletteCameraPosition', .3, 1.45, 2.45);
-  model.userData.roulette = { cabinet, chair, wheel, ball, buttons, seatAnchor, cameraFocus, cameraPosition };
+  const cameraFocus = anchor('RouletteCameraFocus', 0, 1.28, .33);
+  const cameraPosition = anchor('RouletteCameraPosition', .85, 1.7, 2.6);
+  model.userData.roulette = { cabinet, chair, wheel, ball, effects, lighting, winEffects, buttons, seatAnchor, cameraFocus, cameraPosition };
   return model;
 }

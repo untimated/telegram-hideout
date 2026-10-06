@@ -40,9 +40,12 @@ export function createAudio({ serverNow, onBlocked }) {
   let slot = null;
   let slotTimer;
   const rouletteButton = new Audio('/sfx/roulette-button.mp3');
+  const rouletteCoin = new Audio('/sfx/roulette-coin.mp3');
   const rouletteSpin = new Audio('/sfx/roulette-spin.mp3');
   const rouletteMusic = new Audio('/sfx/roulette-spin-bgm.mp3');
-  for (const [element, volume] of [[rouletteButton, .6], [rouletteSpin, .65], [rouletteMusic, .4]]) {
+  const rouletteWin = new Audio('/sfx/roulette-win.mp3');
+  const rouletteFail = new Audio('/sfx/roulette-fail.mp3');
+  for (const [element, volume] of [[rouletteButton, .6], [rouletteCoin, .6], [rouletteSpin, .65], [rouletteMusic, .4], [rouletteWin, .7], [rouletteFail, .5]]) {
     element.preload = 'auto';
     spatial.addSource(element, { position: { x: ROULETTE.x, y: .8, z: ROULETTE.z }, volume, range: 8 });
   }
@@ -173,20 +176,36 @@ export function createAudio({ serverNow, onBlocked }) {
       rouletteButton.currentTime = 0;
       tryPlay(rouletteButton);
     },
+    addRouletteCoin() {
+      if (!unlocked || muted) return;
+      rouletteCoin.currentTime = 0;
+      tryPlay(rouletteCoin);
+    },
     get rouletteSpinDuration() { return rouletteDuration(); },
     // Local preview audio follows the seated panel lifetime and shares its result delay.
     setRouletteSpin(active) {
       if (active) {
         if (rouletteStartedAt !== null) return;
+        rouletteWin.pause();
+        rouletteFail.pause();
         rouletteStartedAt = Date.now();
         startRouletteSpin();
       } else {
         rouletteStartedAt = null;
-        for (const element of [rouletteButton, rouletteSpin, rouletteMusic]) {
+        for (const element of [rouletteButton, rouletteCoin, rouletteSpin, rouletteMusic, rouletteWin, rouletteFail]) {
           element.pause();
           element.currentTime = 0;
         }
       }
+    },
+    // A boolean plays that preview outcome; null clears it when starting another bet.
+    setRouletteResult(won) {
+      for (const element of [rouletteWin, rouletteFail]) {
+        element.pause();
+        element.currentTime = 0;
+      }
+      if (typeof won !== 'boolean' || !unlocked || muted) return;
+      tryPlay(won ? rouletteWin : rouletteFail);
     },
     // Local reader sounds follow panel lifetime, independently of shared room music.
     setReading(active) {
@@ -266,6 +285,7 @@ export function createAudio({ serverNow, onBlocked }) {
         music.pause(); bandMusic.pause(); ambience.pause(); slotReel.pause(); slotPayout.pause(); slotWin.pause(); slotFail.pause();
         holdingPaper.pause(); paperFlip.pause();
         rouletteButton.pause(); rouletteSpin.pause(); rouletteMusic.pause();
+        rouletteCoin.pause(); rouletteWin.pause(); rouletteFail.pause();
       } else {
         spatial.unlock().then(ready => onBlocked?.(!ready));
         unlocked = true; tryPlay(ambience); startMusic(); startBand(); startSlotReel();

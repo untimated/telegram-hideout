@@ -35,5 +35,5 @@ export function buildLounge(context) {
   }
   [[-3.5, -1.25], [-2.3, -1.25], [-.6, .05], [-.6, 1.25]].forEach(([x, z], index) => seatable(place(models.SquareSeat(), x, 0, z), [`cube-${index + 1}`]));
   // Behind the fountain's east stools, marking the edge of the sofa lounge.
-  buildNewsstand(context, .15, .65, Math.PI / 2).scale.setScalar(.5);
+  buildNewsstand(context, .15, .65, Math.PI / 2).scale.setScalar(.625);
 }

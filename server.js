@@ -170,6 +170,8 @@ export function createHideoutServer(options = {}) {
   const menuIconURLs = Object.fromEntries(menuIcons.map(icon => [icon.id, `/menu-icons/${icon.name}`]));
   const staticAssets = new Map([
     ['/hideout.css', staticAsset('./public/hideout.css', 'text/css; charset=utf-8')],
+    ['/branding/gossip-bar-logo.webp', staticAsset('./assets/branding/gossip-bar-logo.webp', 'image/webp', 'public, max-age=86400')],
+    ['/branding/roulette-logo.png', staticAsset('./assets/branding/roulette-logo.png', 'image/png', 'public, max-age=86400')],
     ...NEWSPAPER.articles.map(article => [
       article.photo.src, staticAsset(`./assets/news/${article.id}.jpg`, 'image/jpeg', 'public, max-age=86400'),
     ]),
@@ -195,6 +197,8 @@ export function createHideoutServer(options = {}) {
       ['slot-reel', 'slot-reel(96K).mp3'], ['slot-payout', 'slot-payout(96K).mp3'], ['casino-win', 'casino-win(96K).mp3'],
       ['trumpet-fail', 'trumpet-fail(96K).mp3'], ['holding-paper', 'holding-paper(96K).mp3'],
       ['paper-flip', 'paper-filp(96K).mp3'], ['roulette-button', 'roulette-button(96K).mp3'],
+      ['roulette-win', 'slot-payout(96K).mp3'], ['roulette-fail', 'trumpet-fail(96K).mp3'],
+      ['roulette-coin', 'roulette-coin(96K).mp3'],
       ['roulette-spin', 'roulette-spin(96K).mp3'], ['roulette-spin-bgm', 'roulette-spin-bgm(96K).mp3']].map(([id, file]) => [
       `/sfx/${id}.mp3`, staticAsset(`./assets/sfx/${file}`, 'audio/mpeg', 'public, max-age=86400'),
     ]),

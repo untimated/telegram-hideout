@@ -1,4 +1,4 @@
-import { ROULETTE } from './game/roulette.js';
+import { ROULETTE, ROULETTE_BETS } from './game/roulette.js';
 import { SEAT_BY_ID } from './game/seats.js';
 
 // UI preview only: sitting is authoritative; bet, color and result stay local to the wizard.
@@ -16,18 +16,22 @@ export function buildRoulettePanel({ body, foot, game, machine, setHeading, clos
     return node;
   };
   const seat = SEAT_BY_ID.get(ROULETTE.seatID);
-  const buttons = machine.userData.roulette.buttons;
+  const { buttons, animation } = machine.userData.roulette;
   const idleY = Object.fromEntries(Object.entries(buttons).map(([id, object]) => [id, object.position.y]));
   let step = 0;
-  let bet = 7;
+  let bet = 0;
+  const wagerCoins = [];
   let color = null;
   let spinning = false;
+  let previewResult;
   let spinTimer;
-  let input, next, note, cash, choiceStatus;
+  let next, note, cash, choiceStatus, total, undo, clearBet;
+  const betButtons = new Map();
+  const betCounts = new Map();
   const presses = new Map();
   const requestedAt = Date.now();
 
-  const validBet = () => Number.isSafeInteger(bet) && bet >= 1 && bet <= game.state().self.coins;
+  const validBet = () => Number.isSafeInteger(bet) && bet >= 10 && bet % 10 === 0 && bet <= game.state().self.coins;
   function highlight() {
     for (const [id, object] of Object.entries(buttons)) {
       const selected = step === 2 && id === color;
@@ -55,11 +59,14 @@ export function buildRoulettePanel({ body, foot, game, machine, setHeading, clos
       spinning = true;
       setHeading('2 OF 3 · SPIN', 'Spinning…');
       game.audio.setRouletteSpin(true);
+      previewResult = animation.start(game.audio.rouletteSpinDuration, { color, winChance: ROULETTE.winChance });
       highlight();
       update();
       spinTimer = setTimeout(() => {
         spinning = false;
         game.audio.setRouletteSpin(false);
+        animation.finish(previewResult.color === color);
+        game.audio.setRouletteResult(previewResult.color === color);
         render(3);
       }, game.audio.rouletteSpinDuration);
     }
@@ -71,22 +78,46 @@ export function buildRoulettePanel({ body, foot, game, machine, setHeading, clos
     highlight();
     if (step === 1) {
       color = null;
+      bet = 0;
+      wagerCoins.length = 0;
+      game.audio.setRouletteResult(null);
       highlight();
       setHeading('1 OF 3 · BET', 'Place your bet');
       cash = element('p', 'roulette-cash');
-      const row = element('label', 'slot-bet');
-      input = element('input', 'modal-input');
-      Object.assign(input, { type: 'number', min: 1, step: 1, inputMode: 'numeric', value: String(bet) });
-      row.append(element('span', '', 'Bet (coins)'), input);
+      const row = element('div', 'roulette-bets');
+      row.setAttribute('role', 'group');
+      row.setAttribute('aria-label', 'Bet amount');
+      betButtons.clear();
+      betCounts.clear();
+      for (const value of ROULETTE_BETS) {
+        const coin = button('roulette-bet-coin', '', () => {
+          const amount = bet + value;
+          if (!Number.isSafeInteger(amount) || amount > game.state().self.coins) return;
+          wagerCoins.push(value);
+          bet = amount;
+          game.audio.addRouletteCoin();
+          update();
+        });
+        coin.setAttribute('data-value', String(value));
+        coin.setAttribute('aria-label', `Add ${value} coins`);
+        coin.append(element('span', 'roulette-bet-value', String(value)), element('span', 'roulette-bet-unit', 'COINS'));
+        const count = element('span', 'roulette-bet-count');
+        coin.append(count);
+        betCounts.set(value, count);
+        betButtons.set(value, coin);
+        row.append(coin);
+      }
+      const summary = element('div', 'roulette-bet-summary');
+      total = element('p', 'roulette-bet-total');
+      total.setAttribute('role', 'status');
+      undo = button('secondary', 'Undo', () => { bet -= wagerCoins.pop() ?? 0; update(); });
+      clearBet = button('secondary', 'Clear', () => { wagerCoins.length = 0; bet = 0; update(); });
+      summary.append(total, undo, clearBet);
       note = element('p', 'panel-note');
       next = button('primary', 'Next', () => { if (validBet()) render(2); });
-      input.addEventListener('input', () => { bet = input.valueAsNumber; update(); });
-      input.addEventListener('keydown', event => {
-        if (event.key === 'Enter') { event.preventDefault(); if (!next.disabled) next.click(); }
-      });
-      body.append(cash, row, note);
+      body.append(cash, row, summary, note);
       foot.append(next, button('secondary', 'Leave', close));
-      input.focus();
+      betButtons.get(ROULETTE_BETS[0]).focus();
     } else if (step === 2) {
       setHeading('2 OF 3 · COLOR', 'Choose a color');
       body.append(element('p', 'roulette-cash', `Bet: ${bet} coins`));
@@ -97,7 +128,7 @@ export function buildRoulettePanel({ body, foot, game, machine, setHeading, clos
     } else {
       setHeading('3 OF 3 · RESULT', 'Result preview');
       body.append(element('p', 'roulette-cash', `${bet} coins on ${color === 'red' ? 'Red' : 'Black'}`),
-        element('p', 'slot-result', 'Rewards will appear here.'),
+        element('p', 'slot-result', `Landed on ${previewResult.color.toUpperCase()} · ${previewResult.color === color ? 'You win!' : 'You lose.'}`),
         element('p', 'panel-note', 'Preview only · no coins were charged.'));
       foot.append(button('primary', 'Play Again', () => render(1)), button('secondary', 'Leave', close));
     }
@@ -120,11 +151,19 @@ export function buildRoulettePanel({ body, foot, game, machine, setHeading, clos
     if (seated.get(selfID) !== seat.id || !game.isInspecting?.()) return close();
     if (step === 1) {
       cash.textContent = `Cash: ${self.coins} coins`;
-      input.max = String(self.coins);
-      input.setAttribute('aria-invalid', String(!validBet()));
+      for (const [value, coin] of betButtons) {
+        const count = wagerCoins.filter(amount => amount === value).length;
+        coin.disabled = !Number.isSafeInteger(bet + value) || bet + value > self.coins;
+        coin.setAttribute('aria-pressed', String(count > 0));
+        betCounts.get(value).hidden = count === 0;
+        betCounts.get(value).textContent = `×${count}`;
+      }
+      total.textContent = `Bet: ${bet} coins`;
+      undo.disabled = clearBet.disabled = wagerCoins.length === 0;
       next.disabled = !validBet();
-      note.textContent = !Number.isSafeInteger(bet) || bet < 1 ? 'Enter a whole number of coins.'
-        : bet > self.coins ? `You have ${self.coins} coins.` : 'Preview only · no coins are charged.';
+      note.textContent = self.coins < ROULETTE_BETS[0] ? 'You need at least 10 coins to bet.'
+        : bet > self.coins ? 'Your balance changed. Undo or clear the bet.'
+        : bet === 0 ? 'Tap coins to build your bet. Repeated taps stack.' : 'Preview only · no coins are charged.';
     } else if (step === 2) {
       note.textContent = spinning ? 'Spinning… please wait.'
         : !validBet() ? 'Your balance changed. Leave and adjust the bet.' : color
@@ -144,6 +183,7 @@ export function buildRoulettePanel({ body, foot, game, machine, setHeading, clos
       clearTimeout(spinTimer);
       spinning = false;
       game.audio.setRouletteSpin(false);
+      animation.cancel();
       for (const timer of presses.values()) clearTimeout(timer);
       presses.clear();
       for (const [id, object] of Object.entries(buttons)) {
