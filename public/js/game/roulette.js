@@ -5,7 +5,8 @@ export const ROULETTE_BETS = Object.freeze([10, 50, 100]);
 
 // Placement, chair attachment and audio preview timing. Betting rules will be added later.
 export const ROULETTE = Object.freeze({
-  map: 'prototype', x: 2.8, z: 1.1, yaw: -Math.PI / 10,
+  // Against the pool glass beside Gossip Jackpot, facing into the room.
+  map: 'main', x: -6.15, z: .75, yaw: Math.PI / 2,
   seatID: 'roulette-chair', seatY: .556, seatZ: 1.03,
   spinDuration: 12565, // Measured clip length in ms; used until audio metadata loads.
   winChance: .7, // Temporary preview boost; a fair color bet would be 12/25.

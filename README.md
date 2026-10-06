@@ -23,7 +23,8 @@ Telegram login, membership checks, chat and movement controls, but have separate
 players, chat, positions, game state and saved wallets. Prototype logins do not
 send entry notifications to the Telegram group. Unknown map names return 400.
 No extra endpoint deployment or environment variables are needed. Gossip Jackpot
-is in the original bar beside the jukebox, against the pool glass. Tap it
+is in the original bar against the pool glass, beside the roulette machine
+(a seated, preview-only red/black game; no coins change hands yet). Tap it
 (or aim and press E) to open the close-up, bet field and Spin button. Bet any
 whole number of coins from 7 up to
 your balance. Exclusive outcomes are a 20% chance of exactly two matching

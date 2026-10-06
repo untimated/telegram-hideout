@@ -1,6 +1,6 @@
 import { SLOTS } from '../game/slots.js';
 
-// Against the pool glass beside the jukebox, facing into the room.
+// Against the pool glass beside the roulette machine, facing into the room.
 export function buildArcade({ models, place, interactable }, { x = SLOTS.x, z = SLOTS.z, yaw = SLOTS.yaw } = {}) {
   const machine = place(models.SlotMachine(), x, 0, z, yaw);
   interactable('gossip-jackpot', machine, {

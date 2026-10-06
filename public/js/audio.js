@@ -3,7 +3,7 @@ import { SLOTS } from './game/slots.js';
 import { ROULETTE } from './game/roulette.js';
 import { createSpatialAudio } from './spatial-audio.js';
 
-const JUKEBOX_POSITION = { x: -6.2, z: .9 };
+const JUKEBOX_POSITION = { x: -6.2, z: 2.3 };
 const MUSIC_PANNING = { fullPanDegrees: 40, panFadeStart: 2, panFadeEnd: 10 };
 const MUTE_KEY = 'hideout.muted';
 // Jukebox volume in steps of 1..MUSIC_STEPS; the top step is the device's full volume.

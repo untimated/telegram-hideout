@@ -66,7 +66,7 @@ export function itemAvailable(item, weekday) {
   return !item.days || item.days.includes(weekday);
 }
 
-export const JUKEBOX = Object.freeze({ x: -5.1, z: .9, reach: 4.5 });
+export const JUKEBOX = Object.freeze({ x: -5.1, z: 2.3, reach: 4.5 });
 export const SONGS = Object.freeze([
   { id: 'determined-vaporwave', title: 'Determined Vaporwave', artist: 'Catch22Music', price: 10, duration: 199, file: 'catch22music - Determined Vaporwave (96K).mp3' },
   { id: 'exploring-vaporwave', title: 'Exploring Vaporwave', artist: 'Catch22Music', price: 10, duration: 193, file: 'catch22music - Exploring Vaporwave (96K).mp3' },

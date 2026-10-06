@@ -5,8 +5,8 @@ import { ROULETTE } from './public/js/game/roulette.js';
 import { SEAT_BY_ID } from './public/js/game/seats.js';
 
 const seat = SEAT_BY_ID.get(ROULETTE.seatID);
-function setup(mapID = 'prototype') {
-  const positions = new Map(['a', 'b'].map(id => [id, { x: ROULETTE.x, z: ROULETTE.z + 1.6 }]));
+function setup(mapID = 'main') {
+  const positions = new Map(['a', 'b'].map(id => [id, { x: seat.x + .5, z: seat.z }]));
   const messages = [];
   const game = createGame({
     mapID, now: () => Date.UTC(2026, 9, 5, 3),
@@ -21,7 +21,7 @@ function setup(mapID = 'prototype') {
   return { game, positions, messages };
 }
 
-test('prototype roulette chair snaps one occupant to the seat without charging and releases on exit', () => {
+test('main-room roulette chair snaps one occupant to the seat without charging and releases on exit', () => {
   const { game, positions, messages } = setup();
   const before = game.snapshot('a').self;
   game.handle('a', { type: 'sit', seat: seat.id });
@@ -40,14 +40,14 @@ test('prototype roulette chair snaps one occupant to the seat without charging a
   assert.deepEqual(game.snapshot('a').self, before);
 });
 
-test('roulette seating rejects the wrong map, distant and asleep players; bar seats remain unavailable in prototype', () => {
-  const main = setup('main');
-  main.game.handle('a', { type: 'sit', seat: seat.id });
-  assert.match(main.messages.at(-1).text, /not in this map/);
-  assert.deepEqual(main.game.snapshot('a').seated, {});
+test('roulette seating rejects the wrong map, distant and asleep players', () => {
+  const prototype = setup('prototype');
+  prototype.game.handle('a', { type: 'sit', seat: seat.id });
+  assert.match(prototype.messages.at(-1).text, /not in this map/);
+  assert.deepEqual(prototype.game.snapshot('a').seated, {});
+  prototype.game.handle('a', { type: 'sit', seat: 'stool-front-1' });
+  assert.match(prototype.messages.at(-1).text, /not in this map/, 'bar seats stay unavailable in prototype');
   const { game, positions, messages } = setup();
-  game.handle('a', { type: 'sit', seat: 'stool-front-1' });
-  assert.match(messages.at(-1).text, /not in this map/);
   positions.set('a', { x: -5, z: -5 });
   game.handle('a', { type: 'sit', seat: seat.id });
   assert.match(messages.at(-1).text, /Walk closer/);

@@ -4,9 +4,9 @@ import { buildNewsstand } from './newsstand.js';
 // Jukebox against the glass, café tables and the east lounge, and the refreshment island.
 export function buildLounge(context) {
   const { models, place, unlit, interactable, seatable } = context;
-  const jukebox = place(models.Jukebox(), -6.2, 0, .9, Math.PI / 2);
+  const jukebox = place(models.Jukebox(), -6.2, 0, 2.3, Math.PI / 2);
   jukebox.scale.set(1, .85, .85);
-  interactable('jukebox', jukebox, { label: 'Jukebox', approach: { x: -5.1, z: .9, yaw: Math.PI / 2 } });
+  interactable('jukebox', jukebox, { label: 'Jukebox', approach: { x: -5.1, z: 2.3, yaw: Math.PI / 2 } });
 
   for (const z of [-4.8, -3.15]) {
     place(models.CafeTable(), 3.6, 0, z).scale.set(1.12, 1, 1.12);

@@ -22,7 +22,7 @@ export const NPCS = Object.freeze([
   },
   {
     id: 'nicholas', name: 'Nicholas', role: 'Dancer', from: 5, to: 21,
-    x: -4.9, z: 2.1, yaw: -2.2, activity: 'dance',
+    x: -4.9, z: 3.5, yaw: -2.2, activity: 'dance',
     lines: ['Put a song on!', 'Can you feel the beat?', 'Dance with me!'],
   },
   {

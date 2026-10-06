@@ -6,6 +6,7 @@ import { buildBar } from './stage/bar.js';
 import { buildKitchen } from './stage/kitchen.js';
 import { buildLounge } from './stage/lounge.js';
 import { buildArcade } from './stage/arcade.js';
+import { buildRoulette } from './stage/roulette.js';
 import { buildStageArea } from './stage/stage-area.js';
 import { buildDressing } from './stage/dressing.js';
 import { buildNpcs } from './stage/npcs.js';
@@ -24,7 +25,7 @@ import { buildBandEffects } from './stage/band-effects.js';
 export function buildGossipBarStage(THREE, scene, options = {}) {
   const context = createStageContext(THREE, scene, options);
   for (const build of [
-    buildLighting, buildShell, buildPool, buildPoolFloats, buildBar, buildKitchen, buildLounge, buildArcade,
+    buildLighting, buildShell, buildPool, buildPoolFloats, buildBar, buildKitchen, buildLounge, buildArcade, buildRoulette,
     buildStageArea, buildDressing, buildNpcs, buildBoards, buildCeiling, buildBackdrop, buildBandEffects,
   ]) build(context);
   return context.level;

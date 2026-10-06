@@ -7,7 +7,7 @@ export function buildDressing(context) {
   const { models, place } = context;
   for (const [x, z, seed] of [
     [6, -5.6, 17], [6, -1.9, 21], [6, 1.9, 26],
-    [-6.05, 2.1, 32], [-5.7, 6.1, 39], [-2.3, 6.1, 42],
+    [-6.05, 3.2, 32], [-5.7, 6.1, 39], [-2.3, 6.1, 42],
   ]) place(models.PottedPlant(.78, seed, true), x, 0, z);
 
   // East wall: three small procedural frames, lit by alternating warm/magenta sconces.
